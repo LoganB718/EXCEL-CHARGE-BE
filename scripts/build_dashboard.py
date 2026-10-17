@@ -41,6 +41,7 @@ ACCENT = "2A78D6"
 AMBER = "EDA100"
 INPUT_FILL = "EAF2FD"
 INPUT_INK = "1F4E9A"
+RED_T, GREEN_T = "B42318", "1E7B34"   # textes d'alerte (surcharge) et de confort
 # Palette catégorielle validée (ordre fixe) + gris pour « Autres projets »
 SLOT_COLORS = ["2A78D6", "EB6834", "1BAF7A", "EDA100", "E87BA4", "008300", "6250D6", "E34948", "9CA3AF"]
 N_SLOTS = len(SLOT_COLORS)
@@ -111,6 +112,9 @@ ws_data["A2"] = ("Saisir une valeur par cellule, sans ligne vide, sous chaque en
                  "Colonnes F et G : capacité et charge fixe propres à un dessinateur (vide = valeurs par défaut "
                  "réglées en haut du Dashboard). Les valeurs ci-dessous sont des exemples à remplacer.")
 ws_data["A2"].font = font(9, color=GREY, italic=True)
+ws_data["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+ws_data.merge_cells("A2:H2")
+ws_data.row_dimensions[2].height = 26
 ws_data.row_dimensions[3].height = 42
 for col, title, values in DESS_COLS:
     ws_data.column_dimensions[col].width = 17
@@ -123,15 +127,16 @@ for col, title, values in DESS_COLS:
         c = ws_data[f"{col}{r}"]
         c.font = font(10, color=INPUT_INK)
         c.fill = fill("F5F8FD")
-        c.number_format = '#,##0" h"'
+        c.number_format = 'General" h"'
         c.alignment = Alignment(horizontal="center")
         c.border = Border(bottom=side("E5E7EB"), left=side("E5E7EB"), right=side("E5E7EB"))
     for j, v in enumerate(values):
         if v is not None:
             ws_data[f"{col}{4 + j}"] = v
-    dv = DataValidation(type="decimal", operator="between", formula1="0", formula2="744", allow_blank=True,
-                        showErrorMessage=True, errorTitle="Heures par mois",
-                        error="Saisir un nombre d'heures par mois (ou laisser vide pour la valeur par défaut).")
+    dv = DataValidation(type="decimal", operator="between", formula1="1" if col == "F" else "0", formula2="744",
+                        allow_blank=True, showErrorMessage=True, errorTitle="Heures par mois",
+                        error="Saisir un nombre d'heures par mois (ou laisser vide pour la valeur par défaut)."
+                              + (" La capacité doit être d'au moins 1 h." if col == "F" else ""))
     dv.add(f"{col}4:{col}{DATA_LAST}")
     ws_data.add_data_validation(dv)
 ws_data["F7"].comment = Comment("Exemple : temps partiel 80 % → 96 h/mois au lieu de la capacité par défaut.",
@@ -560,12 +565,18 @@ for r in range(R1, R2 + 1):
     ws[f"BZ{r}"] = f'=IF(D{r}=1,IF(TRIM(Charge!K{r})="","{NA_LABEL}",TRIM(Charge!K{r})),"")'
     ws[f"CA{r}"] = (f'=IF(AND($CD$4<>"",BZ{r}=$CD$4),COUNTIFS($BZ${R1}:$BZ${R2},$CD$4,$L${R1}:$L${R2},"<"&L{r})+1,"")')
 
+# noms des dessinateurs de la liste Data, sans espaces superflus (EJ)
+hdr("EJ", "Dessinateurs Data (nettoyés)", 18)
+for d in range(4, DATA_LAST + 1):
+    ws[f"EJ{d}"] = f"=TRIM(Data!$E${d})"
+DATA_NAMES = f"$EJ$4:$EJ${DATA_LAST}"
+
 # dessinateur sélectionné : réglages et indicateurs (CC libellé / CD valeur)
 DS = {}
 DESS_IND = [
     ("nom", "Dessinateur sélectionné", "=TRIM(p_Dessinateur)", "General"),
     ("pos", "Position dans la liste Data (0 = absent)",
-     f"=IF(CD4=\"\",0,IFERROR(MATCH(CD4,Data!$E$4:$E${DATA_LAST},0),0))", "0"),
+     f"=IF(CD4=\"\",0,IFERROR(MATCH(CD4,{DATA_NAMES},0),0))", "0"),
     ("cap", "Capacité mensuelle (h)",
      f"=IF(CD4=\"\",0,IF(CD5=0,p_HeuresETP,IF(ISNUMBER(INDEX(Data!$F$4:$F${DATA_LAST},CD5)),"
      f"INDEX(Data!$F$4:$F${DATA_LAST},CD5),p_HeuresETP)))", "#,##0.0"),
@@ -581,9 +592,9 @@ DESS_IND = [
     ("picIdx", "Rang du mois le plus chargé", "=MATCH(CD12,CJ4:CJ15,0)", "0"),
     ("picMois", "Mois le plus chargé", "=INDEX(CG4:CG15,CD13)", "MMM YYYY"),
     ("picOcc", "Occupation du mois le plus chargé", "=INDEX(CO4:CO15,CD13)", "0%"),
-    ("nbSur", "Nombre de mois en surcharge", '=COUNTIF(CN4:CN15,"<-0.05")', "0"),
-    ("depass", "Dépassement cumulé (h)", '=-SUMIF(CN4:CN15,"<-0.05")', "#,##0.0"),
-    ("dispo", "Heures encore disponibles sur la période (h)", '=SUMIF(CN4:CN15,">0")', "#,##0.0"),
+    ("nbSur", "Nombre de mois en surcharge", "=COUNT(CQ4:CQ15)", "0"),
+    ("depass", "Dépassement cumulé (h)", "=SUMPRODUCT((CN4:CN15<0)*(-CN4:CN15))", "#,##0"),
+    ("dispo", "Heures encore disponibles sur la période (h)", "=SUMPRODUCT((CN4:CN15>0)*CN4:CN15)", "#,##0"),
     ("occMoy", "Occupation moyenne sur la période", "=AVERAGE(CO4:CO15)", "0%"),
     ("premSur", "1er mois en surcharge", '=IF(CD16=0,"",INDEX(CG4:CG15,MIN(CQ4:CQ15)))', "MMM YYYY"),
     ("perim", "Périmètre (rappel)", "=p_Perimetre", "General"),
@@ -602,10 +613,11 @@ for k, row in {"nom": 4, "pos": 5, "cap": 6, "fixe": 7, "pic": 12, "picIdx": 13,
     assert DS[k] == f"Calculs!$CD${row}", k
 
 # charge mensuelle du dessinateur sélectionné (CF..CQ, une ligne par mois)
-DM = ["CF", "CG", "CH", "CI", "CJ", "CK", "CL", "CM", "CN", "CO", "CQ"]
+DM = ["CF", "CG", "CH", "CI", "CJ", "CK", "CL", "CM", "CN", "CO", "CP", "CQ"]
 for c, t in zip(DM, ["N° mois", "Mois", "Charge fixe (h)", "Charge projets (h)", "Charge totale (h)",
                      "Capacité (h)", "Projets dans la capacité (h)", "Dépassement (h)",
-                     "Marge (+) / dépassement (-) (h)", "Occupation", "N° mois si surcharge"]):
+                     "Marge (+) / dépassement (-) (h, total arrondi)", "Occupation (total arrondi)",
+                     "Charge totale arrondie (h)", "N° mois si surcharge"]):
     hdr(c, t, 11)
 for m, mc in enumerate(MCOLS):
     r = 4 + m
@@ -616,11 +628,12 @@ for m, mc in enumerate(MCOLS):
     ws[f"CI{r}"] = f'=IF($CD$4="",0,SUMIF($BZ${R1}:$BZ${R2},$CD$4,{mc}${R1}:{mc}${R2}))'
     ws[f"CJ{r}"] = f"=CH{r}+CI{r}"
     ws[f"CK{r}"] = '=IF($CD$4="",0,$CD$6)'
-    ws[f"CL{r}"] = f"=MAX(0,MIN(CI{r},CK{r}-CH{r}))"
-    ws[f"CM{r}"] = f"=CI{r}-CL{r}"
-    ws[f"CN{r}"] = f"=CK{r}-CJ{r}"
-    ws[f"CO{r}"] = f"=IF(CK{r}<=0,0,CJ{r}/CK{r})"
-    ws[f"CQ{r}"] = f'=IF(CN{r}<-0.05,CF{r},"")'
+    ws[f"CL{r}"] = f"=IF(CN{r}<0,MAX(0,MIN(CI{r},CK{r}-CH{r})),CI{r})"   # projets dans la capacité
+    ws[f"CM{r}"] = f"=CI{r}-CL{r}"                                        # dépassement (rouge)
+    ws[f"CN{r}"] = f"=CK{r}-CP{r}"                                        # marge sur le total arrondi
+    ws[f"CO{r}"] = f"=IF(CK{r}<=0,IF(CP{r}>0,9.99,0),CP{r}/CK{r})"
+    ws[f"CP{r}"] = f"=ROUND(CJ{r},0)"
+    ws[f"CQ{r}"] = f'=IF(CN{r}<0,CF{r},"")'
     for c in ("CH", "CI", "CJ", "CK", "CL", "CM", "CN"):
         ws[f"{c}{r}"].number_format = "0.0"
     ws[f"CO{r}"].number_format = "0%"
@@ -654,14 +667,16 @@ for k in range(1, N_DESS + 1):
     r = TEAM_R1 + k - 1
     d = 3 + k   # ligne correspondante dans Data
     ws[f"CS{r}"] = k
-    ws[f"{TEAM_NAME}{r}"] = f'=IF(TRIM(Data!$E${d})="","",TRIM(Data!$E${d}))'
+    dup = f"COUNTIF($EJ$4:EJ{d - 1},EJ{d})>0" if d > 4 else "FALSE"
+    ws[f"{TEAM_NAME}{r}"] = f'=IF(OR(EJ{d}="",{dup}),"",EJ{d})'
     ws[f"{TEAM_CAP}{r}"] = f'=IF({TEAM_NAME}{r}="","",IF(ISNUMBER(Data!$F${d}),Data!$F${d},p_HeuresETP))'
     ws[f"{TEAM_FIX}{r}"] = f'=IF({TEAM_NAME}{r}="","",IF(ISNUMBER(Data!$G${d}),Data!$G${d},p_ChargeFixe))'
     for m in range(N_MONTHS):
         h, o, mc = TEAM_H[m], TEAM_O[m], MCOLS[m]
         ws[f"{h}{r}"] = f'=IF(${TEAM_NAME}{r}="","",SUMIF($BZ${R1}:$BZ${R2},${TEAM_NAME}{r},{mc}${R1}:{mc}${R2}))'
-        ws[f"{o}{r}"] = (f'=IF(${TEAM_NAME}{r}="","",IF(${TEAM_CAP}{r}<=0,0,'
-                         f'(${TEAM_FIX}{r}+{h}{r})/${TEAM_CAP}{r}))')
+        tot = f"ROUND(${TEAM_FIX}{r}+{h}{r},0)"
+        ws[f"{o}{r}"] = (f'=IF(${TEAM_NAME}{r}="","",IF(${TEAM_CAP}{r}<=0,IF({tot}>0,9.99,0),'
+                         f'{tot}/${TEAM_CAP}{r}))')
         ws[f"{h}{r}"].number_format = "0.0"
         ws[f"{o}{r}"].number_format = "0%"
     ws[f"{TEAM_MAX}{r}"] = f'=IF({TEAM_NAME}{r}="","",MAX({TEAM_O[0]}{r}:{TEAM_O[-1]}{r}))'
@@ -746,14 +761,16 @@ def box(r1, r2, c1, c2, bg=WHITE, border=LINE, top=None):
                 bottom=side(border) if r == r2 else None)
 
 
-def put(r, c1, c2, value, f=None, h="left", v="center", fmt=None, r2=None, bg=None, wrap=False, indent=0):
+def put(r, c1, c2, value, f=None, h="left", v="center", fmt=None, r2=None, bg=None, wrap=False, indent=0,
+        shrink=False):
     r2 = r2 or r
     if c2 > c1 or r2 > r:
         ws.merge_cells(start_row=r, start_column=gc(c1), end_row=r2, end_column=gc(c2))
     cell = ws.cell(r, gc(c1))
     cell.value = value
     cell.font = f or font()
-    cell.alignment = Alignment(horizontal=h, vertical=v, wrap_text=wrap, indent=indent)
+    cell.alignment = Alignment(horizontal=h, vertical=v, wrap_text=wrap, indent=indent,
+                               shrink_to_fit=shrink and not wrap)
     if fmt:
         cell.number_format = fmt
     if bg:
@@ -805,7 +822,8 @@ for name, (c1, c2) in PARAMS.items():
     cell = put(P_ROW, c1, c2, defaults[name], font(10, True, INPUT_INK), h="center", bg=INPUT_FILL,
                fmt={"p_PremierMois": "MMMM YYYY", "p_HeuresETP": '#,##0" h"',
                     "p_ChargeFixe": '#,##0" h"'}.get(name))
-    put(6, c1, c2, hints[name][0], font(7, color=MUTED, italic=True), h="center", v="top", fmt=hints[name][1])
+    put(6, c1, c2, hints[name][0], font(7, color=MUTED, italic=True), h="center", v="top", fmt=hints[name][1],
+        shrink=True)
 
 dv = DataValidation(type="list", formula1=f'"{PERIM_RUN},{PERIM_ALL}"', allow_blank=False)
 dv.add(f"{gl(PARAMS['p_Perimetre'][0])}{P_ROW}")
@@ -929,7 +947,7 @@ for k, (lab, col, kind) in enumerate(POP):
 section(25, "INDICATEURS CLÉS")
 TILES = [(i * 12, i * 12 + 10) for i in range(5)]
 kpi_val = font(22, True, NAVY)
-kpi_month = font(18, True, NAVY)
+kpi_month = font(16, True, NAVY)
 KPIS = [
     ("CHARGE TOTALE IDENTIFIÉE", f"={K['total']}", H_FMT,
      (f"={K['reste']}", '"Reste à faire : "#,##0" h"'),
@@ -951,9 +969,9 @@ KPIS = [
 for (c1, c2), (title, formula, fmt, s1, s2) in zip(TILES, KPIS):
     box(27, 32, c1, c2, top=side(ACCENT, "thick"))
     put(28, c1 + 1, c2 - 1, title, title_f)
-    put(29, c1 + 1, c2 - 1, formula, kpi_month if "MMMM" in fmt else kpi_val, fmt=fmt)
-    put(30, c1 + 1, c2 - 1, s1[0], sub_f, fmt=s1[1])
-    put(31, c1 + 1, c2 - 1, s2[0], sub_f, fmt=s2[1])
+    put(29, c1 + 1, c2 - 1, formula, kpi_month if "MMMM" in fmt else kpi_val, fmt=fmt, shrink=True)
+    put(30, c1 + 1, c2 - 1, s1[0], sub_f, fmt=s1[1], shrink=True)
+    put(31, c1 + 1, c2 - 1, s2[0], sub_f, fmt=s2[1], shrink=True)
 
 # ---- Section 3 : graphiques
 section(34, "RÉPARTITION DE LA CHARGE")
@@ -1230,7 +1248,11 @@ dv = DataValidation(type="list", formula1="lst_Dessinateurs", allow_blank=True, 
                     errorTitle="Dessinateur inconnu", error="Choisir un nom de la liste (onglet Data, colonne E).")
 dv.add(f"{gl(5)}5")
 ws.add_data_validation(dv)
-put(6, 5, 16, "Liste de l'onglet Data (colonne E)", font(7, color=MUTED, italic=True), h="center", v="top")
+put(6, 5, 16, f'=IF(AND({DS["nom"]}<>"",{DS["pos"]}=0),"Absent de la liste Data : réglages par défaut",'
+             f'"Liste de l\'onglet Data (colonne E)")', font(7, color=MUTED, italic=True), h="center", v="top",
+    shrink=True)
+ws.conditional_formatting.add(f"{gl(5)}6", FormulaRule(formula=[f'LEFT(${gl(5)}$6,7)="Absent "'],
+                                                       font=Font(color=RED_T, bold=True, italic=False)))
 info_lab = font(9, True, GREY)
 info_val = font(10, True, NAVY)
 put(5, 18, 21, "Capacité", info_lab, h="right", indent=1)
@@ -1240,7 +1262,7 @@ put(5, 32, 34, f"={DS['fixe']}", info_val, fmt='#,##0" h"')
 put(5, 36, 42, "Dispo. projets", info_lab, h="right", indent=1)
 put(5, 43, 46, f"={DS['capProj']}", info_val, fmt='#,##0" h/mois"')
 put(6, 18, 46, "par mois · valeurs propres au dessinateur (Data, colonnes F-G) ou valeurs par défaut du Dashboard",
-    font(7, color=MUTED, italic=True), h="center", v="top")
+    font(7, color=MUTED, italic=True), h="center", v="top", shrink=True)
 put(5, 48, 57, f"={DS['debut']}", font(9, True, GREY), h="right", fmt='"12 mois dès "MMMM YYYY')
 put(6, 48, 57, f'="Périmètre : "&{DS["perim"]}', font(7, color=MUTED, italic=True), h="right", v="top")
 
@@ -1249,11 +1271,12 @@ section(8, f'=IF({DS["nom"]}="","SYNTHÈSE — choisir un dessinateur","SYNTHÈS
 D_KPIS = [
     ("CAPACITÉ MENSUELLE", f"={DS['cap']}", H_FMT,
      (f"={DS['fixe']}", '"dont "#,##0" h de charge fixe"'),
-     (f"={DS['capProj']}", '"soit "#,##0" h/mois pour les projets"')),
+     (f'=IF(AND({DS["nom"]}<>"",{DS["fixe"]}>={DS["cap"]}),"Attention : charge fixe ≥ capacité",{DS["capProj"]})',
+      '"soit "#,##0" h/mois pour les projets"')),
     ("CHARGE PROJETS AFFECTÉE", f"={DS['chargeTot']}", H_FMT,
      (f"={DS['nbAff']}", '"sur "0" affaire(s)"'),
-     (f"={DS['periode']}", '"dont "#,##0" h sur les 12 mois affichés"')),
-    ("MOIS LE PLUS CHARGÉ", f'=IF(OR({DS["nom"]}="",{DS["pic"]}=0),"—",{DS["picMois"]})', "MMMM YYYY",
+     (f"={DS['periode']}", '"dont "#,##0" h sur 12 mois"')),
+    ("MOIS LE PLUS CHARGÉ", f'=IF(OR({DS["nom"]}="",{DS["periode"]}=0),"—",{DS["picMois"]})', "MMMM YYYY",
      (f"={DS['pic']}", '#,##0" h au total (fixe + projets)"'),
      (f"={DS['picOcc']}", '0%" de la capacité"')),
     ("MOIS EN SURCHARGE", f"={DS['nbSur']}", '0" mois"',
@@ -1263,22 +1286,28 @@ D_KPIS = [
      (f"={DS['dispo']}", '#,##0" h encore disponibles"'),
      ("sur les 12 mois affichés", None)),
 ]
-RED_T, GREEN_T = "B42318", "1E7B34"
 for (c1, c2), (title, formula, fmt, s1, s2) in zip(TILES, D_KPIS):
     box(10, 15, c1, c2, top=side(ACCENT, "thick"))
     put(11, c1 + 1, c2 - 1, title, title_f)
-    put(12, c1 + 1, c2 - 1, formula, kpi_month if "MMMM" in fmt else kpi_val, fmt=fmt)
-    put(13, c1 + 1, c2 - 1, s1[0], sub_f, fmt=s1[1])
-    put(14, c1 + 1, c2 - 1, s2[0], sub_f, fmt=s2[1])
-# alertes : mois le plus chargé au-delà de 100 % et nombre de mois en surcharge
-c1 = TILES[2][0] + 1
+    put(12, c1 + 1, c2 - 1, formula, kpi_month if "MMMM" in fmt else kpi_val, fmt=fmt, shrink=True)
+    put(13, c1 + 1, c2 - 1, s1[0], sub_f, fmt=s1[1], shrink=True)
+    put(14, c1 + 1, c2 - 1, s2[0], sub_f, fmt=s2[1], shrink=True)
+# alertes (formules limitées à l'onglet) : mois le plus chargé > 100 %, mois en surcharge, charge fixe >= capacité
+SEL = f"TRIM(${gl(5)}$5)"
+occ_ref = f"${gl(TILES[2][0] + 1)}$14"
 for r in (12, 14):
-    ws.conditional_formatting.add(f"{gl(c1)}{r}", FormulaRule(formula=[f"{DS['picOcc']}>1.0005"],
-                                                               font=Font(color=RED_T, bold=True)))
-c1 = TILES[3][0] + 1
-ws.conditional_formatting.add(f"{gl(c1)}12", FormulaRule(formula=[f"{DS['nbSur']}>0"], font=Font(color=RED_T)))
-ws.conditional_formatting.add(f"{gl(c1)}12", FormulaRule(formula=[f"AND({DS['nom']}<>\"\",{DS['nbSur']}=0)"],
-                                                         font=Font(color=GREEN_T)))
+    ws.conditional_formatting.add(f"{gl(TILES[2][0] + 1)}{r}",
+                                  FormulaRule(formula=[f"AND(ISNUMBER({occ_ref}),{occ_ref}>1)"],
+                                              font=Font(color=RED_T, bold=True)))
+nb_ref = f"${gl(TILES[3][0] + 1)}$12"
+ws.conditional_formatting.add(f"{gl(TILES[3][0] + 1)}12",
+                              FormulaRule(formula=[f"AND(ISNUMBER({nb_ref}),{nb_ref}>0)"], font=Font(color=RED_T)))
+ws.conditional_formatting.add(f"{gl(TILES[3][0] + 1)}12",
+                              FormulaRule(formula=[f'AND({SEL}<>"",{nb_ref}=0)'], font=Font(color=GREEN_T)))
+warn_ref = f"${gl(TILES[0][0] + 1)}$14"
+ws.conditional_formatting.add(f"{gl(TILES[0][0] + 1)}14",
+                              FormulaRule(formula=[f'LEFT({warn_ref},9)="Attention"'],
+                                          font=Font(color=RED_T, bold=True)))
 
 # ---- charge mensuelle : graphique + tableau
 section(17, "CHARGE MENSUELLE")
@@ -1365,12 +1394,12 @@ for r, label, col, bold in MT:
             ws.cell(r, gc(i)).border = Border(top=side("D6DCE4"))
 row_rng = lambda r: f"{gl(10)}{r}:{gl(10 + 4 * N_MONTHS - 1)}{r}"
 first = gl(10)
-ws.conditional_formatting.add(row_rng(44), FormulaRule(formula=[f"AND(ISNUMBER({first}44),{first}44<-0.5)"],
+ws.conditional_formatting.add(row_rng(44), FormulaRule(formula=[f"AND(ISNUMBER({first}44),{first}44<0)"],
                                                        font=Font(color=RED_T, bold=True)))
-ws.conditional_formatting.add(row_rng(44), FormulaRule(formula=[f"AND(ISNUMBER({first}44),{first}44>0.5)"],
+ws.conditional_formatting.add(row_rng(44), FormulaRule(formula=[f"AND(ISNUMBER({first}44),{first}44>0)"],
                                                        font=Font(color=GREEN_T)))
-OCC_RULES = [  # (condition, fond, texte)
-    ("{c}>1.0005", "F8D7D7", RED_T),
+OCC_RULES = [  # (condition, fond, texte) — occupation calculée sur le total arrondi à l'heure
+    ("{c}>1", "F8D7D7", RED_T),
     ("{c}>=0.9", "FFF1CC", "8A5A00"),
     ("{c}>=0", "E3F4E8", GREEN_T),
 ]
@@ -1442,7 +1471,7 @@ for k in range(N_DESS):
 team_rng = f"{gl(10)}73:{gl(10 + 4 * N_MONTHS - 1)}{72 + N_DESS}"
 occ_cf(team_rng, f"{gl(10)}73")
 ws.conditional_formatting.add(f"{gl(1)}73:{gl(9)}{72 + N_DESS}",
-                              FormulaRule(formula=[f'AND(${gl(1)}73<>"",${gl(1)}73={DS["nom"]})'],
+                              FormulaRule(formula=[f'AND(${gl(1)}73<>"",${gl(1)}73={SEL})'],
                                           font=Font(bold=True, color=ACCENT),
                                           fill=PatternFill("solid", start_color="EAF2FD", end_color="EAF2FD",
                                                            bgColor="EAF2FD")))
