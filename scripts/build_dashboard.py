@@ -16,6 +16,7 @@ from openpyxl.chart.layout import Layout, ManualLayout
 from openpyxl.chart.marker import DataPoint
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.text import RichText
+from openpyxl.comments import Comment
 from openpyxl.drawing.line import LineProperties
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from openpyxl.drawing.text import CharacterProperties, Font as DFont, Paragraph, ParagraphProperties
@@ -45,7 +46,8 @@ SLOT_COLORS = ["2A78D6", "EB6834", "1BAF7A", "EDA100", "E87BA4", "008300", "6250
 N_SLOTS = len(SLOT_COLORS)
 
 FIRST, LAST = 4, 503            # lignes de données de l'onglet Charge (500 affaires max)
-N_MONTHS = 12
+N_MONTHS = 12                   # ne pas augmenter : les blocs de l'onglet Calculs sont placés pour 12 mois
+assert N_MONTHS <= 12
 N_TABLE = 100                   # lignes du tableau des affaires sur le Dashboard
 
 PERIM_ALL = "Tous les projets"
@@ -78,21 +80,27 @@ ws_data = wb.active
 ws_data.title = "Data"
 ws_charge = wb.create_sheet("Charge", 0)
 ws_dash = wb.create_sheet("Dashboard")
+ws_dess = wb.create_sheet("Dessinateurs")
 ws_calc = wb.create_sheet("Calculs")
 
-LISTS = [
-    ("Chefs de projet", "lst_ChefsProjet",
+LISTS = [  # (colonne, en-tête, nom de la liste, valeurs d'exemple)
+    ("A", "Chefs de projet", "lst_ChefsProjet",
      ["Julie Martin", "Thomas Bernard", "Sophie Lefèvre", "Nicolas Moreau", "Camille Laurent"]),
-    ("Noms de projet", "lst_Projets",
+    ("B", "Noms de projet", "lst_Projets",
      ["ATLAS", "BORÉAL", "CASSIOPÉE", "DELTA", "ORION", "PÉGASE", "VEGA", "TITAN"]),
-    ("Types", "lst_Types",
+    ("C", "Types", "lst_Types",
      ["Étude de conception", "Modification", "Mise à jour de plans", "Industrialisation",
       "Chiffrage / avant-projet"]),
-    ("Coordinateurs", "lst_Coordinateurs", ["Marc Dubois", "Isabelle Roux"]),
-    ("Dessinateurs projeteurs", "lst_Dessinateurs",
+    ("D", "Coordinateurs", "lst_Coordinateurs", ["Marc Dubois", "Isabelle Roux"]),
+    ("E", "Dessinateurs projeteurs", "lst_Dessinateurs",
      ["Lucas Garnier", "Emma Faure", "Hugo Mercier", "Léa Chevalier", "Antoine Blanc"]),
-    ("Prestataires (ressources externes)", "lst_Prestataires",
+    ("H", "Prestataires (ressources externes)", "lst_Prestataires",
      ["Alpha Ingénierie", "CAO Services Ouest", "Technidessin"]),
+]
+# Réglages propres à chaque dessinateur (même ligne que son nom en colonne E) ; vide = valeur par défaut
+DESS_COLS = [  # (colonne, en-tête, valeurs d'exemple alignées sur la liste des dessinateurs)
+    ("F", "Capacité mensuelle (h)\nvide = défaut", [None, None, None, 96, None]),
+    ("G", "Charge fixe hors projet (h/mois)\nvide = défaut", [None, None, None, None, None]),
 ]
 DATA_LAST = 203
 
@@ -100,11 +108,35 @@ ws_data["A1"] = "LISTES DE RÉFÉRENCE"
 ws_data["A1"].font = font(14, True, NAVY)
 ws_data["A2"] = ("Saisir une valeur par cellule, sans ligne vide, sous chaque en-tête : les listes déroulantes "
                  "de l'onglet Charge se mettent à jour automatiquement (200 valeurs max par liste). "
-                 "Les valeurs ci-dessous sont des exemples à remplacer.")
+                 "Colonnes F et G : capacité et charge fixe propres à un dessinateur (vide = valeurs par défaut "
+                 "réglées en haut du Dashboard). Les valeurs ci-dessous sont des exemples à remplacer.")
 ws_data["A2"].font = font(9, color=GREY, italic=True)
-ws_data.row_dimensions[3].height = 30
-for i, (title, name, values) in enumerate(LISTS):
-    col = L(i + 1)
+ws_data.row_dimensions[3].height = 42
+for col, title, values in DESS_COLS:
+    ws_data.column_dimensions[col].width = 17
+    h = ws_data[f"{col}3"]
+    h.value = title
+    h.font = font(9, True, WHITE)
+    h.fill = fill("2F5C8F")
+    h.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for r in range(4, DATA_LAST + 1):
+        c = ws_data[f"{col}{r}"]
+        c.font = font(10, color=INPUT_INK)
+        c.fill = fill("F5F8FD")
+        c.number_format = '#,##0" h"'
+        c.alignment = Alignment(horizontal="center")
+        c.border = Border(bottom=side("E5E7EB"), left=side("E5E7EB"), right=side("E5E7EB"))
+    for j, v in enumerate(values):
+        if v is not None:
+            ws_data[f"{col}{4 + j}"] = v
+    dv = DataValidation(type="decimal", operator="between", formula1="0", formula2="744", allow_blank=True,
+                        showErrorMessage=True, errorTitle="Heures par mois",
+                        error="Saisir un nombre d'heures par mois (ou laisser vide pour la valeur par défaut).")
+    dv.add(f"{col}4:{col}{DATA_LAST}")
+    ws_data.add_data_validation(dv)
+ws_data["F7"].comment = Comment("Exemple : temps partiel 80 % → 96 h/mois au lieu de la capacité par défaut.",
+                                "Plan de charge")
+for col, title, name, values in LISTS:
     ws_data.column_dimensions[col].width = 30
     h = ws_data[f"{col}3"]
     h.value = title
@@ -283,10 +315,11 @@ def gl(i):
 
 P_ROW = 5
 PARAMS = {  # nom: (col début input, col fin input)
-    "p_Perimetre": (4, 12),
-    "p_Repartition": (21, 32),
-    "p_PremierMois": (40, 44),
-    "p_HeuresETP": (54, 58),
+    "p_Perimetre": (4, 10),
+    "p_Repartition": (16, 28),
+    "p_PremierMois": (35, 39),
+    "p_HeuresETP": (45, 48),     # capacité mensuelle par défaut d'une personne
+    "p_ChargeFixe": (54, 58),    # charge fixe hors projet par défaut (h/mois/personne)
 }
 for name, (c1, _) in PARAMS.items():
     wb.defined_names[name] = DefinedName(name, attr_text=f"Dashboard!${gl(c1)}${P_ROW}")
@@ -392,8 +425,10 @@ INDICATORS = [
     ("picIdx", "Rang du mois de pic", f"=MATCH(AL17,AP4:AP{3 + N_MONTHS},0)", "0"),
     ("picMois", "Mois le plus chargé", f"=INDEX(AO4:AO{3 + N_MONTHS},AL18)", "MMM YYYY"),
     ("picActives", "Affaires actives sur le mois de pic", f"=INDEX(AQ4:AQ{3 + N_MONTHS},AL18)", "0"),
-    ("picETP", "ETP nécessaires au pic", "=IF(N(p_HeuresETP)<=0,0,AL17/p_HeuresETP)", "0.0"),
-    ("totalETP", "Charge totale en ETP-mois", "=IF(N(p_HeuresETP)<=0,0,AL4/p_HeuresETP)", "0.0"),
+    ("picETP", "ETP nécessaires au pic (capacité projet = capacité - charge fixe)",
+     "=IF(N(p_HeuresETP)-N(p_ChargeFixe)<=0,0,AL17/(p_HeuresETP-p_ChargeFixe))", "0.0"),
+    ("totalETP", "Charge totale en ETP-mois", "=IF(N(p_HeuresETP)-N(p_ChargeFixe)<=0,0,AL4/(p_HeuresETP-p_ChargeFixe))",
+     "0.0"),
     ("bigIdx", "Position de la plus grosse affaire", "=BX4", "0"),
     ("nbTermines", "Affaires terminées (avancement 100 %)", f"=COUNTIFS(B{R1}:B{R2},1,C{R1}:C{R2},\">=1\")", "0"),
     ("finPeriode", "Dernier mois affiché", f"=EDATE(AL14,{N_MONTHS - 1})", "MMM YYYY"),
@@ -503,6 +538,168 @@ for k in range(1, N_TABLE + 1):
     ws[f"BW{r}"] = k
     ws[f"BX{r}"] = f'=IFERROR(MATCH(BW{r},$L${R1}:$L${R2},0),"")'
 
+# ---- Charge par dessinateur
+N_DESS = 12          # dessinateurs affichés dans le tableau d'occupation de l'équipe
+N_DESS_AFF = 15      # affaires listées pour le dessinateur sélectionné
+NA_LABEL = "(non affecté)"
+
+
+def hdr(col, text, width=None):
+    ws[f"{col}3"] = text
+    ws[f"{col}3"].font = hdr_font
+    ws[f"{col}3"].fill = fill("2F5C8F")
+    ws[f"{col}3"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+    if width:
+        ws.column_dimensions[col].width = width
+
+
+# par ligne : dessinateur (affaires du périmètre) et rang parmi les affaires du dessinateur sélectionné
+hdr("BZ", "Dessinateur (périmètre)", 16)
+hdr("CA", "Rang affaire du dessinateur sélectionné", 12)
+for r in range(R1, R2 + 1):
+    ws[f"BZ{r}"] = f'=IF(D{r}=1,IF(TRIM(Charge!K{r})="","{NA_LABEL}",TRIM(Charge!K{r})),"")'
+    ws[f"CA{r}"] = (f'=IF(AND($CD$4<>"",BZ{r}=$CD$4),COUNTIFS($BZ${R1}:$BZ${R2},$CD$4,$L${R1}:$L${R2},"<"&L{r})+1,"")')
+
+# dessinateur sélectionné : réglages et indicateurs (CC libellé / CD valeur)
+DS = {}
+DESS_IND = [
+    ("nom", "Dessinateur sélectionné", "=TRIM(p_Dessinateur)", "General"),
+    ("pos", "Position dans la liste Data (0 = absent)",
+     f"=IF(CD4=\"\",0,IFERROR(MATCH(CD4,Data!$E$4:$E${DATA_LAST},0),0))", "0"),
+    ("cap", "Capacité mensuelle (h)",
+     f"=IF(CD4=\"\",0,IF(CD5=0,p_HeuresETP,IF(ISNUMBER(INDEX(Data!$F$4:$F${DATA_LAST},CD5)),"
+     f"INDEX(Data!$F$4:$F${DATA_LAST},CD5),p_HeuresETP)))", "#,##0.0"),
+    ("fixe", "Charge fixe hors projet (h/mois)",
+     f"=IF(CD4=\"\",0,IF(CD5=0,p_ChargeFixe,IF(ISNUMBER(INDEX(Data!$G$4:$G${DATA_LAST},CD5)),"
+     f"INDEX(Data!$G$4:$G${DATA_LAST},CD5),p_ChargeFixe)))", "#,##0.0"),
+    ("capProj", "Capacité disponible pour les projets (h/mois)", "=MAX(0,CD6-CD7)", "#,##0.0"),
+    ("chargeTot", "Charge projets affectée, toutes périodes (h)",
+     f'=IF(CD4="",0,SUMIF($BZ${R1}:$BZ${R2},CD4,$E${R1}:$E${R2}))', "#,##0.0"),
+    ("nbAff", "Nombre d'affaires affectées", f'=IF(CD4="",0,COUNTIF($BZ${R1}:$BZ${R2},CD4))', "0"),
+    ("periode", "Charge projets sur la période affichée (h)", "=SUM(CI4:CI15)", "#,##0.0"),
+    ("pic", "Mois le plus chargé : charge totale (h)", "=MAX(CJ4:CJ15)", "#,##0.0"),
+    ("picIdx", "Rang du mois le plus chargé", "=MATCH(CD12,CJ4:CJ15,0)", "0"),
+    ("picMois", "Mois le plus chargé", "=INDEX(CG4:CG15,CD13)", "MMM YYYY"),
+    ("picOcc", "Occupation du mois le plus chargé", "=INDEX(CO4:CO15,CD13)", "0%"),
+    ("nbSur", "Nombre de mois en surcharge", '=COUNTIF(CN4:CN15,"<-0.05")', "0"),
+    ("depass", "Dépassement cumulé (h)", '=-SUMIF(CN4:CN15,"<-0.05")', "#,##0.0"),
+    ("dispo", "Heures encore disponibles sur la période (h)", '=SUMIF(CN4:CN15,">0")', "#,##0.0"),
+    ("occMoy", "Occupation moyenne sur la période", "=AVERAGE(CO4:CO15)", "0%"),
+    ("premSur", "1er mois en surcharge", '=IF(CD16=0,"",INDEX(CG4:CG15,MIN(CQ4:CQ15)))', "MMM YYYY"),
+    ("perim", "Périmètre (rappel)", "=p_Perimetre", "General"),
+    ("debut", "1er mois affiché (rappel)", "=$AL$14", "MMM YYYY"),
+    ("nbListe", "Nombre de dessinateurs dans la liste Data", f"=COUNTA(Data!$E$4:$E${DATA_LAST})", "0"),
+]
+hdr("CC", "Dessinateur sélectionné", 40)
+hdr("CD", "Valeur", 14)
+for i, (key, label, formula, fmt) in enumerate(DESS_IND):
+    r = 4 + i
+    DS[key] = f"Calculs!$CD${r}"
+    ws[f"CC{r}"] = label
+    ws[f"CD{r}"] = formula
+    ws[f"CD{r}"].number_format = fmt
+for k, row in {"nom": 4, "pos": 5, "cap": 6, "fixe": 7, "pic": 12, "picIdx": 13, "nbSur": 16}.items():
+    assert DS[k] == f"Calculs!$CD${row}", k
+
+# charge mensuelle du dessinateur sélectionné (CF..CQ, une ligne par mois)
+DM = ["CF", "CG", "CH", "CI", "CJ", "CK", "CL", "CM", "CN", "CO", "CQ"]
+for c, t in zip(DM, ["N° mois", "Mois", "Charge fixe (h)", "Charge projets (h)", "Charge totale (h)",
+                     "Capacité (h)", "Projets dans la capacité (h)", "Dépassement (h)",
+                     "Marge (+) / dépassement (-) (h)", "Occupation", "N° mois si surcharge"]):
+    hdr(c, t, 11)
+for m, mc in enumerate(MCOLS):
+    r = 4 + m
+    ws[f"CF{r}"] = m + 1
+    ws[f"CG{r}"] = f"={mc}$3"
+    ws[f"CG{r}"].number_format = "MMM YY"
+    ws[f"CH{r}"] = '=IF($CD$4="",0,$CD$7)'
+    ws[f"CI{r}"] = f'=IF($CD$4="",0,SUMIF($BZ${R1}:$BZ${R2},$CD$4,{mc}${R1}:{mc}${R2}))'
+    ws[f"CJ{r}"] = f"=CH{r}+CI{r}"
+    ws[f"CK{r}"] = '=IF($CD$4="",0,$CD$6)'
+    ws[f"CL{r}"] = f"=MAX(0,MIN(CI{r},CK{r}-CH{r}))"
+    ws[f"CM{r}"] = f"=CI{r}-CL{r}"
+    ws[f"CN{r}"] = f"=CK{r}-CJ{r}"
+    ws[f"CO{r}"] = f"=IF(CK{r}<=0,0,CJ{r}/CK{r})"
+    ws[f"CQ{r}"] = f'=IF(CN{r}<-0.05,CF{r},"")'
+    for c in ("CH", "CI", "CJ", "CK", "CL", "CM", "CN"):
+        ws[f"{c}{r}"].number_format = "0.0"
+    ws[f"CO{r}"].number_format = "0%"
+
+# occupation de l'équipe : dessinateurs de la liste Data (CS..DV)
+TEAM_NAME, TEAM_CAP, TEAM_FIX = "CT", "CU", "CV"
+TEAM_H = [L(101 + m) for m in range(N_MONTHS)]          # CW..DH : heures projets
+TEAM_O = [L(101 + N_MONTHS + m) for m in range(N_MONTHS)]  # DI..DT : occupation
+TEAM_MAX = L(101 + 2 * N_MONTHS)                        # DU
+TEAM_TOT = L(102 + 2 * N_MONTHS)                        # DV
+hdr("CS", "N°", 6)
+hdr(TEAM_NAME, "Dessinateur", 18)
+hdr(TEAM_CAP, "Capacité (h)", 10)
+hdr(TEAM_FIX, "Charge fixe (h)", 10)
+for m in range(N_MONTHS):
+    ws[f"{TEAM_H[m]}3"] = f"={MCOLS[m]}$3"
+    ws[f"{TEAM_O[m]}3"] = f"={MCOLS[m]}$3"
+    for c in (TEAM_H[m], TEAM_O[m]):
+        ws[f"{c}3"].number_format = "MMM YY"
+        ws[f"{c}3"].font = hdr_font
+        ws[f"{c}3"].fill = fill("2F5C8F")
+ws[f"{TEAM_H[0]}2"] = "Heures projets par mois →"
+ws[f"{TEAM_O[0]}2"] = "Occupation (charge fixe + projets) / capacité →"
+hdr(TEAM_MAX, "Occupation maximale", 11)
+hdr(TEAM_TOT, "Charge projets sur la période (h)", 11)
+TEAM_R1 = 4
+TEAM_R2 = TEAM_R1 + N_DESS - 1
+NA_ROW = TEAM_R2 + 1
+OTHER_ROW = TEAM_R2 + 2
+for k in range(1, N_DESS + 1):
+    r = TEAM_R1 + k - 1
+    d = 3 + k   # ligne correspondante dans Data
+    ws[f"CS{r}"] = k
+    ws[f"{TEAM_NAME}{r}"] = f'=IF(TRIM(Data!$E${d})="","",TRIM(Data!$E${d}))'
+    ws[f"{TEAM_CAP}{r}"] = f'=IF({TEAM_NAME}{r}="","",IF(ISNUMBER(Data!$F${d}),Data!$F${d},p_HeuresETP))'
+    ws[f"{TEAM_FIX}{r}"] = f'=IF({TEAM_NAME}{r}="","",IF(ISNUMBER(Data!$G${d}),Data!$G${d},p_ChargeFixe))'
+    for m in range(N_MONTHS):
+        h, o, mc = TEAM_H[m], TEAM_O[m], MCOLS[m]
+        ws[f"{h}{r}"] = f'=IF(${TEAM_NAME}{r}="","",SUMIF($BZ${R1}:$BZ${R2},${TEAM_NAME}{r},{mc}${R1}:{mc}${R2}))'
+        ws[f"{o}{r}"] = (f'=IF(${TEAM_NAME}{r}="","",IF(${TEAM_CAP}{r}<=0,0,'
+                         f'(${TEAM_FIX}{r}+{h}{r})/${TEAM_CAP}{r}))')
+        ws[f"{h}{r}"].number_format = "0.0"
+        ws[f"{o}{r}"].number_format = "0%"
+    ws[f"{TEAM_MAX}{r}"] = f'=IF({TEAM_NAME}{r}="","",MAX({TEAM_O[0]}{r}:{TEAM_O[-1]}{r}))'
+    ws[f"{TEAM_MAX}{r}"].number_format = "0%"
+    ws[f"{TEAM_TOT}{r}"] = f'=IF({TEAM_NAME}{r}="","",SUM({TEAM_H[0]}{r}:{TEAM_H[-1]}{r}))'
+    ws[f"{TEAM_TOT}{r}"].number_format = "#,##0.0"
+ws[f"{TEAM_NAME}{NA_ROW}"] = NA_LABEL
+ws[f"{TEAM_NAME}{OTHER_ROW}"] = "Autres (absents de la liste Data ou au-delà du 12e)"
+for m in range(N_MONTHS):
+    h, mc = TEAM_H[m], MCOLS[m]
+    ws[f"{h}{NA_ROW}"] = f'=SUMIF($BZ${R1}:$BZ${R2},"{NA_LABEL}",{mc}${R1}:{mc}${R2})'
+    ws[f"{h}{OTHER_ROW}"] = f"=MAX(0,ROUND(AP{4 + m}-SUM({h}{TEAM_R1}:{h}{NA_ROW}),1))"
+    ws[f"{h}{NA_ROW}"].number_format = ws[f"{h}{OTHER_ROW}"].number_format = "0.0"
+for r in (NA_ROW, OTHER_ROW):
+    ws[f"{TEAM_TOT}{r}"] = f"=SUM({TEAM_H[0]}{r}:{TEAM_H[-1]}{r})"
+    ws[f"{TEAM_TOT}{r}"].number_format = "#,##0.0"
+
+# affaires du dessinateur sélectionné (DX..EH), par charge décroissante
+DA = ["DX", "DY", "DZ", "EA", "EB", "EC", "ED", "EE", "EF", "EG", "EH"]
+for c, t in zip(DA, ["Rang", "Position dans Charge", "Projet", "Sous-projet", "Produit", "Chef de projet",
+                     "Charge (h)", "Heures sur la période", "Début planifié", "Date de besoin", "Avancement"]):
+    hdr(c, t, 13)
+for k in range(1, N_DESS_AFF + 1):
+    r = 3 + k
+    i = f"DY{r}"
+    ws[f"DX{r}"] = k
+    ws[i] = f'=IFERROR(MATCH(DX{r},$CA${R1}:$CA${R2},0),"")'
+    for c, col in (("DZ", "B"), ("EA", "C"), ("EB", "D"), ("EC", "A")):
+        ws[f"{c}{r}"] = f'=IF({i}="","",INDEX(Charge!${col}${R1}:${col}${R2},{i})&"")'
+    ws[f"ED{r}"] = f'=IF({i}="","",INDEX($E${R1}:$E${R2},{i}))'
+    ws[f"EE{r}"] = f'=IF({i}="","",INDEX(${SUM_COL}${R1}:${SUM_COL}${R2},{i}))'
+    for c, col in (("EF", "N"), ("EG", "F")):
+        src = f"INDEX(Charge!${col}${R1}:${col}${R2},{i})"
+        ws[f"{c}{r}"] = f'=IF({i}="","",IF(ISNUMBER({src}),{src},"—"))'
+        ws[f"{c}{r}"].number_format = "DD/MM/YYYY"
+    ws[f"EH{r}"] = f'=IF({i}="","",INDEX($C${R1}:$C${R2},{i}))'
+    ws[f"EH{r}"].number_format = "0%"
+
 ws.freeze_panes = "B4"
 
 # ---------------------------------------------------------------- Dashboard
@@ -584,15 +781,18 @@ put(2, 44, 57, "=TODAY()", font(10, color="C9D3E3"), h="right", fmt='"Édité le
 
 # Barre de paramètres
 box(5, 6, 0, NG - 1)
-labels = {"p_Perimetre": (0, 3, "Périmètre"), "p_Repartition": (14, 20, "Répartition mensuelle"),
-          "p_PremierMois": (34, 39, "1er mois affiché"), "p_HeuresETP": (46, 53, "Heures / ETP / mois")}
-defaults = {"p_Perimetre": PERIM_RUN, "p_Repartition": REP_SMOOTH, "p_PremierMois": None, "p_HeuresETP": 140}
+labels = {"p_Perimetre": (0, 3, "Périmètre"), "p_Repartition": (12, 15, "Répartition"),
+          "p_PremierMois": (30, 34, "1er mois affiché"), "p_HeuresETP": (41, 44, "Capacité"),
+          "p_ChargeFixe": (50, 53, "Charge fixe")}
+defaults = {"p_Perimetre": PERIM_RUN, "p_Repartition": REP_SMOOTH, "p_PremierMois": None, "p_HeuresETP": 120,
+            "p_ChargeFixe": 20}
 hints = {"p_Perimetre": ("En cours = avancement < 100 %", None),
          "p_Repartition": (f'=IF(p_Repartition="{REP_START}","Toute la charge sur le mois de début planifié",'
                            f'"Prorata des jours entre début planifié et date de besoin")', None),
          "p_PremierMois": ('=IF(ISNUMBER(p_PremierMois),"Saisi manuellement",Calculs!$AL$13)',
                            '"Vide = auto ("MMM YYYY")"'),
-         "p_HeuresETP": ("Conversion en ETP", None)}
+         "p_HeuresETP": ("par personne", None),
+         "p_ChargeFixe": ("hors projet", None)}
 inp_border = side("8FB3E6")
 for name, (c1, c2) in PARAMS.items():
     lc1, lc2, text = labels[name]
@@ -603,7 +803,8 @@ for name, (c1, c2) in PARAMS.items():
         cell.border = Border(top=inp_border, bottom=inp_border,
                              left=inp_border if i == c1 else None, right=inp_border if i == c2 else None)
     cell = put(P_ROW, c1, c2, defaults[name], font(10, True, INPUT_INK), h="center", bg=INPUT_FILL,
-               fmt="MMMM YYYY" if name == "p_PremierMois" else None)
+               fmt={"p_PremierMois": "MMMM YYYY", "p_HeuresETP": '#,##0" h"',
+                    "p_ChargeFixe": '#,##0" h"'}.get(name))
     put(6, c1, c2, hints[name][0], font(7, color=MUTED, italic=True), h="center", v="top", fmt=hints[name][1])
 
 dv = DataValidation(type="list", formula1=f'"{PERIM_RUN},{PERIM_ALL}"', allow_blank=False)
@@ -619,8 +820,18 @@ dv = DataValidation(type="date", operator="greaterThan", formula1="36526", allow
 dv.add(f"{gl(PARAMS['p_PremierMois'][0])}{P_ROW}")
 ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="between", formula1="1", formula2="744", allow_blank=False,
-                    showErrorMessage=True, error="Saisir un nombre d'heures par mois (ex. 140).")
+                    showErrorMessage=True, error="Saisir la capacité mensuelle d'une personne en heures (ex. 120).",
+                    showInputMessage=True, promptTitle="Capacité par défaut",
+                    prompt="Heures disponibles par mois pour un dessinateur. Une valeur propre à une personne "
+                           "peut être saisie dans l'onglet Data (colonne F).")
 dv.add(f"{gl(PARAMS['p_HeuresETP'][0])}{P_ROW}")
+ws.add_data_validation(dv)
+dv = DataValidation(type="decimal", operator="between", formula1="0", formula2="744", allow_blank=False,
+                    showErrorMessage=True, error="Saisir un nombre d'heures par mois (ex. 20).",
+                    showInputMessage=True, promptTitle="Charge fixe hors projet",
+                    prompt="Heures prises chaque mois hors affaires (petites modifications de plans...). "
+                           "Une valeur propre à une personne peut être saisie dans l'onglet Data (colonne G).")
+dv.add(f"{gl(PARAMS['p_ChargeFixe'][0])}{P_ROW}")
 ws.add_data_validation(dv)
 
 # ---- Section 1 : projets en cours
@@ -718,6 +929,7 @@ for k, (lab, col, kind) in enumerate(POP):
 section(25, "INDICATEURS CLÉS")
 TILES = [(i * 12, i * 12 + 10) for i in range(5)]
 kpi_val = font(22, True, NAVY)
+kpi_month = font(18, True, NAVY)
 KPIS = [
     ("CHARGE TOTALE IDENTIFIÉE", f"={K['total']}", H_FMT,
      (f"={K['reste']}", '"Reste à faire : "#,##0" h"'),
@@ -739,7 +951,7 @@ KPIS = [
 for (c1, c2), (title, formula, fmt, s1, s2) in zip(TILES, KPIS):
     box(27, 32, c1, c2, top=side(ACCENT, "thick"))
     put(28, c1 + 1, c2 - 1, title, title_f)
-    put(29, c1 + 1, c2 - 1, formula, kpi_val, fmt=fmt)
+    put(29, c1 + 1, c2 - 1, formula, kpi_month if "MMMM" in fmt else kpi_val, fmt=fmt)
     put(30, c1 + 1, c2 - 1, s1[0], sub_f, fmt=s1[1])
     put(31, c1 + 1, c2 - 1, s2[0], sub_f, fmt=s2[1])
 
@@ -951,8 +1163,9 @@ NOTES = [
     "Charge par mois : la charge estimée (M) est répartie au prorata des jours calendaires entre la date de "
     "début planifiée (N) et la date de besoin (F). Sans date de besoin, ou si elle précède le début, "
     "toute la charge est placée sur le mois de début.",
-    "Au-delà de 9 projets, les plus petits sont regroupés en « Autres projets » (gris) dans les graphiques.  "
-    "ETP = heures ÷ heures productives par ETP et par mois (paramètre en haut de page, 140 h par défaut).",
+    "Au-delà de 9 projets, les plus petits sont regroupés en « Autres projets » (gris) dans les graphiques.",
+    "ETP = heures de projet ÷ (capacité − charge fixe hors projet) d'une personne sur un mois, soit 100 h avec les "
+    "valeurs par défaut (120 h − 20 h, réglables en haut de page).  Charge par dessinateur : onglet Dessinateurs.",
 ]
 for i, t in enumerate(NOTES):
     put(NOTE_R + 1 + i, 0, NG - 1, t, font(8, color=GREY, italic=True))
@@ -965,6 +1178,304 @@ ws.row_breaks.append(Break(id=56))
 ws.page_margins.left = ws.page_margins.right = 0.3
 ws.page_margins.top = ws.page_margins.bottom = 0.4
 ws.sheet_properties.tabColor = ACCENT
+
+# ---------------------------------------------------------------- Dessinateurs
+ws = ws_dess
+ws.sheet_view.showGridLines = False
+ws.sheet_view.zoomScale = 90
+ws.sheet_properties.tabColor = "1BAF7A"
+ws.column_dimensions["A"].width = 2
+for i in range(NG):
+    ws.column_dimensions[gl(i)].width = 2.71
+ws.column_dimensions[L(gc(NG))].width = 2
+
+D_ROW_H = {1: 6, 2: 30, 3: 18, 4: 8, 5: 22, 6: 14, 7: 10, 8: 20, 9: 6,
+           10: 6, 11: 18, 12: 34, 13: 15, 14: 15, 15: 8, 16: 14, 17: 20, 18: 6,
+           19: 6, 20: 18, 21: 16, 38: 6, 39: 18, 46: 8, 47: 14, 48: 20, 49: 6, 50: 30,
+           66: 14, 67: 14, 68: 20, 69: 6, 70: 6, 71: 15, 72: 18, 87: 8, 88: 14}
+for r in range(22, 38):
+    D_ROW_H[r] = 15
+for r in range(40, 46):
+    D_ROW_H[r] = 16
+for r in range(51, 66):
+    D_ROW_H[r] = 16.5
+for r in range(73, 87):
+    D_ROW_H[r] = 16
+D_LAST = 92
+for r, h in D_ROW_H.items():
+    ws.row_dimensions[r].height = h
+for r in range(1, D_LAST + 1):
+    for c in range(1, gc(NG) + 1):
+        ws.cell(r, c).fill = fill(BG)
+
+for r in (2, 3):
+    for i in range(NG):
+        ws.cell(r, gc(i)).fill = fill(NAVY)
+put(2, 1, 40, "CHARGE PAR DESSINATEUR PROJETEUR", font(17, True, WHITE), bg=NAVY)
+put(3, 1, 44, "Charge fixe hors projet + heures des affaires, comparées à la capacité mensuelle de la personne.",
+    font(9, color="C9D3E3"), bg=NAVY)
+put(2, 44, 57, "=TODAY()", font(10, color="C9D3E3"), h="right", fmt='"Édité le "DD/MM/YYYY', bg=NAVY)
+
+# barre : choix du dessinateur + rappel de ses réglages
+box(5, 6, 0, NG - 1)
+put(5, 0, 4, "Dessinateur", font(9, True, GREY), h="right", indent=1)
+for i in range(5, 17):
+    cell = ws.cell(5, gc(i))
+    cell.fill = fill(INPUT_FILL)
+    cell.border = Border(top=inp_border, bottom=inp_border,
+                         left=inp_border if i == 5 else None, right=inp_border if i == 16 else None)
+put(5, 5, 16, LISTS[4][3][0], font(11, True, INPUT_INK), h="center", bg=INPUT_FILL)
+wb.defined_names["p_Dessinateur"] = DefinedName("p_Dessinateur", attr_text=f"Dessinateurs!${gl(5)}$5")
+dv = DataValidation(type="list", formula1="lst_Dessinateurs", allow_blank=True, showErrorMessage=True,
+                    errorTitle="Dessinateur inconnu", error="Choisir un nom de la liste (onglet Data, colonne E).")
+dv.add(f"{gl(5)}5")
+ws.add_data_validation(dv)
+put(6, 5, 16, "Liste de l'onglet Data (colonne E)", font(7, color=MUTED, italic=True), h="center", v="top")
+info_lab = font(9, True, GREY)
+info_val = font(10, True, NAVY)
+put(5, 18, 21, "Capacité", info_lab, h="right", indent=1)
+put(5, 22, 25, f"={DS['cap']}", info_val, fmt='#,##0" h"')
+put(5, 27, 31, "Charge fixe", info_lab, h="right", indent=1)
+put(5, 32, 34, f"={DS['fixe']}", info_val, fmt='#,##0" h"')
+put(5, 36, 42, "Dispo. projets", info_lab, h="right", indent=1)
+put(5, 43, 46, f"={DS['capProj']}", info_val, fmt='#,##0" h/mois"')
+put(6, 18, 46, "par mois · valeurs propres au dessinateur (Data, colonnes F-G) ou valeurs par défaut du Dashboard",
+    font(7, color=MUTED, italic=True), h="center", v="top")
+put(5, 48, 57, f"={DS['debut']}", font(9, True, GREY), h="right", fmt='"12 mois dès "MMMM YYYY')
+put(6, 48, 57, f'="Périmètre : "&{DS["perim"]}', font(7, color=MUTED, italic=True), h="right", v="top")
+
+# ---- synthèse
+section(8, f'=IF({DS["nom"]}="","SYNTHÈSE — choisir un dessinateur","SYNTHÈSE — "&UPPER({DS["nom"]}))')
+D_KPIS = [
+    ("CAPACITÉ MENSUELLE", f"={DS['cap']}", H_FMT,
+     (f"={DS['fixe']}", '"dont "#,##0" h de charge fixe"'),
+     (f"={DS['capProj']}", '"soit "#,##0" h/mois pour les projets"')),
+    ("CHARGE PROJETS AFFECTÉE", f"={DS['chargeTot']}", H_FMT,
+     (f"={DS['nbAff']}", '"sur "0" affaire(s)"'),
+     (f"={DS['periode']}", '"dont "#,##0" h sur les 12 mois affichés"')),
+    ("MOIS LE PLUS CHARGÉ", f'=IF(OR({DS["nom"]}="",{DS["pic"]}=0),"—",{DS["picMois"]})', "MMMM YYYY",
+     (f"={DS['pic']}", '#,##0" h au total (fixe + projets)"'),
+     (f"={DS['picOcc']}", '0%" de la capacité"')),
+    ("MOIS EN SURCHARGE", f"={DS['nbSur']}", '0" mois"',
+     (f"={DS['depass']}", '"Dépassement cumulé : "#,##0" h"'),
+     (f'=IF({DS["nbSur"]}=0,"Aucun dépassement prévu",{DS["premSur"]})', '"Dès "MMMM YYYY')),
+    ("OCCUPATION MOYENNE", f"={DS['occMoy']}", "0%",
+     (f"={DS['dispo']}", '#,##0" h encore disponibles"'),
+     ("sur les 12 mois affichés", None)),
+]
+RED_T, GREEN_T = "B42318", "1E7B34"
+for (c1, c2), (title, formula, fmt, s1, s2) in zip(TILES, D_KPIS):
+    box(10, 15, c1, c2, top=side(ACCENT, "thick"))
+    put(11, c1 + 1, c2 - 1, title, title_f)
+    put(12, c1 + 1, c2 - 1, formula, kpi_month if "MMMM" in fmt else kpi_val, fmt=fmt)
+    put(13, c1 + 1, c2 - 1, s1[0], sub_f, fmt=s1[1])
+    put(14, c1 + 1, c2 - 1, s2[0], sub_f, fmt=s2[1])
+# alertes : mois le plus chargé au-delà de 100 % et nombre de mois en surcharge
+c1 = TILES[2][0] + 1
+for r in (12, 14):
+    ws.conditional_formatting.add(f"{gl(c1)}{r}", FormulaRule(formula=[f"{DS['picOcc']}>1.0005"],
+                                                               font=Font(color=RED_T, bold=True)))
+c1 = TILES[3][0] + 1
+ws.conditional_formatting.add(f"{gl(c1)}12", FormulaRule(formula=[f"{DS['nbSur']}>0"], font=Font(color=RED_T)))
+ws.conditional_formatting.add(f"{gl(c1)}12", FormulaRule(formula=[f"AND({DS['nom']}<>\"\",{DS['nbSur']}=0)"],
+                                                         font=Font(color=GREEN_T)))
+
+# ---- charge mensuelle : graphique + tableau
+section(17, "CHARGE MENSUELLE")
+box(19, 46, 0, NG - 1)
+put(20, 1, 40, f'=IF({DS["nom"]}="","CHARGE MENSUELLE (HEURES)","CHARGE MENSUELLE DE "&UPPER({DS["nom"]})&" (HEURES)")',
+    title_f)
+FIX_C, PROJ_C, OVER_C, CAP_C = "B8C0CC", "2A78D6", "D03B3B", "1F2937"
+legend = [(1, FIX_C, "Charge fixe hors projet"), (12, PROJ_C, "Charge projets"),
+          (23, OVER_C, "Dépassement de capacité")]
+for c, color, text in legend:
+    sw = ws.cell(21, gc(c))
+    sw.fill = fill(color)
+    sw.border = Border(top=side(WHITE, "thick"), bottom=side(WHITE, "thick"), right=side(WHITE, "medium"))
+    put(21, c + 1, c + 9, text, font(8.5, color=INK))
+for i in (35, 36):
+    ws.cell(21, gc(i)).border = Border(bottom=Side(style="mediumDashed", color=CAP_C))
+put(21, 37, 47, "Capacité mensuelle", font(8.5, color=INK))
+
+DCH_R1, DCH_R2 = 22, 37
+dbar = BarChart()
+dbar.type = "col"
+dbar.grouping = "stacked"
+dbar.overlap = 100
+dbar.gapWidth = 55
+for col, color, title in (("CH", FIX_C, "Charge fixe hors projet"), ("CL", PROJ_C, "Charge projets"),
+                          ("CM", OVER_C, "Dépassement de capacité")):
+    dbar.add_data(Reference(ws_calc, range_string=f"Calculs!${col}$4:${col}${3 + N_MONTHS}"),
+                  titles_from_data=False)
+    sr = dbar.series[-1]
+    sr.tx = SeriesLabel(v=title)
+    sr.graphicalProperties = GraphicalProperties(solidFill=color)
+    sr.graphicalProperties.line = LineProperties(solidFill=WHITE, w=9525)
+d_cats = Reference(ws_calc, range_string=f"Calculs!$CG$4:$CG${3 + N_MONTHS}")
+dbar.set_categories(d_cats)
+dline = LineChart()
+dline.add_data(Reference(ws_calc, range_string=f"Calculs!$CK$4:$CK${3 + N_MONTHS}"), titles_from_data=False)
+cap_s = dline.series[0]
+cap_s.tx = SeriesLabel(v="Capacité mensuelle")
+cap_s.graphicalProperties = GraphicalProperties(ln=LineProperties(solidFill=CAP_C, w=19050, prstDash="dash"))
+cap_s.marker = Marker(symbol="none")
+cap_s.smooth = False
+dline.set_categories(d_cats)
+dbar += dline
+dbar.legend = None
+dbar.title = None
+dbar.roundedCorners = False
+dbar.graphical_properties = no_fill()
+dbar.plot_area.graphicalProperties = no_fill()
+dbar.y_axis.delete = False
+dbar.x_axis.delete = False
+dbar.y_axis.numFmt = NumFmt(formatCode='#,##0" h"', sourceLinked=False)
+dbar.y_axis.majorGridlines.spPr = GraphicalProperties(ln=LineProperties(solidFill="E5E7EB", w=6350))
+dbar.y_axis.graphicalProperties = GraphicalProperties(ln=LineProperties(noFill=True))
+dbar.y_axis.txPr = text_props(800, "6B7280")
+dbar.y_axis.majorTickMark = "none"
+dbar.y_axis.scaling.min = 0
+dbar.x_axis.numFmt = NumFmt(formatCode="mmm yy", sourceLinked=False)
+dbar.x_axis.auto = False
+dbar.x_axis.txPr = text_props(800, "6B7280")
+dbar.x_axis.majorTickMark = "none"
+dbar.x_axis.graphicalProperties = GraphicalProperties(ln=LineProperties(solidFill="BFC6D1", w=9525))
+dbar.anchor = anchor(1, DCH_R1, NG - 2, DCH_R2)
+ws.add_chart(dbar)
+
+# tableau mensuel sous le graphique (mêmes mois que le graphique)
+MT = [(40, "Charge fixe hors projet", "CH", False), (41, "Charge projets", "CI", False),
+      (42, "Charge totale", "CJ", True), (43, "Capacité", "CK", False),
+      (44, "Marge (+) / dépassement (−)", "CN", False), (45, "Occupation", "CO", True)]
+for i in range(1, NG - 1):
+    ws.cell(39, gc(i)).border = Border(bottom=side("B8C2CF"))
+put(39, 1, 9, "Heures par mois", font(8, True, MUTED))
+for m in range(N_MONTHS):
+    c1 = 10 + 4 * m
+    put(39, c1, c1 + 3, f"=Calculs!CG{4 + m}", font(8, True, GREY), h="right", fmt="mmm yy")
+for r, label, col, bold in MT:
+    put(r, 1, 9, label, font(9, bold, INK))
+    for m in range(N_MONTHS):
+        c1 = 10 + 4 * m
+        fmt = {"CO": "0%", "CN": '+#,##0;-#,##0;0'}.get(col, "#,##0")
+        put(r, c1, c1 + 3, f"=Calculs!{col}{4 + m}", font(9, bold, INK if col != "CK" else GREY), h="right",
+            fmt=fmt)
+    if r == 42:
+        for i in range(1, NG - 1):
+            ws.cell(r, gc(i)).border = Border(top=side("D6DCE4"))
+row_rng = lambda r: f"{gl(10)}{r}:{gl(10 + 4 * N_MONTHS - 1)}{r}"
+first = gl(10)
+ws.conditional_formatting.add(row_rng(44), FormulaRule(formula=[f"AND(ISNUMBER({first}44),{first}44<-0.5)"],
+                                                       font=Font(color=RED_T, bold=True)))
+ws.conditional_formatting.add(row_rng(44), FormulaRule(formula=[f"AND(ISNUMBER({first}44),{first}44>0.5)"],
+                                                       font=Font(color=GREEN_T)))
+OCC_RULES = [  # (condition, fond, texte)
+    ("{c}>1.0005", "F8D7D7", RED_T),
+    ("{c}>=0.9", "FFF1CC", "8A5A00"),
+    ("{c}>=0", "E3F4E8", GREEN_T),
+]
+
+
+def occ_cf(rng_txt, ref):
+    for cond, bg, fg in OCC_RULES:
+        ws.conditional_formatting.add(
+            rng_txt, FormulaRule(formula=[f"AND(ISNUMBER({ref}),{cond.format(c=ref)})"], stopIfTrue=True,
+                                 fill=PatternFill("solid", start_color=bg, end_color=bg, bgColor=bg),
+                                 font=Font(color=fg, bold=True)))
+
+
+occ_cf(row_rng(45), f"{first}45")
+
+# ---- affaires du dessinateur
+section(48, f'=IF({DS["nom"]}="","AFFAIRES DU DESSINATEUR","AFFAIRES DE "&UPPER({DS["nom"]})&" (par charge décroissante)")')
+D_TCOLS = [("N°", 2, "center", "0", "DX"), ("Projet", 9, "left", None, "DZ"), ("Sous-projet", 9, "left", None, "EA"),
+           ("Produit", 9, "left", None, "EB"), ("Chef de projet", 7, "left", None, "EC"),
+           ("Charge (h)", 5, "right", "#,##0", "ED"), ("Heures sur la période", 6, "right", "#,##0", "EE"),
+           ("Début planifié", 4, "center", "DD/MM/YY", "EF"), ("Date de besoin", 4, "center", "DD/MM/YY", "EG"),
+           ("Avancement", 4, "right", "0%", "EH")]
+d_spans = []
+c = 0
+for title, w, al, fmt, _ in D_TCOLS:
+    d_spans.append((c, c + w - 1))
+    for i in range(c, c + w):
+        ws.cell(50, gc(i)).fill = fill(NAVY)
+    put(50, c, c + w - 1, title, font(9, True, WHITE), h="center", bg=NAVY, wrap=True)
+    c += w
+assert c == NG
+for k in range(1, N_DESS_AFF + 1):
+    r = 50 + k
+    for (title, w, al, fmt, col), (s1, s2) in zip(D_TCOLS, d_spans):
+        src = f"Calculs!{col}{3 + k}"
+        formula = f'=IF(Calculs!$DY${3 + k}="","",{src})'
+        put(r, s1, s2, formula, font(9, title == "Projet", INK if title != "N°" else GREY), h=al, fmt=fmt,
+            indent=1 if al != "center" else 0)
+d_tbl = f"{gl(0)}51:{gl(NG - 1)}{50 + N_DESS_AFF}"
+ws.conditional_formatting.add(d_tbl, FormulaRule(formula=[f'AND(${gl(0)}51<>"",MOD(ROW(),2)=0)'],
+                                                 border=Border(bottom=row_line),
+                                                 fill=PatternFill("solid", start_color="F5F7FA", end_color="F5F7FA",
+                                                                  bgColor="F5F7FA")))
+ws.conditional_formatting.add(d_tbl, FormulaRule(formula=[f'${gl(0)}51<>""'], border=Border(bottom=row_line),
+                                                 fill=PatternFill("solid", start_color=WHITE, end_color=WHITE,
+                                                                  bgColor=WHITE)))
+put(66, 0, NG - 1, f'=IF({DS["nbAff"]}>{N_DESS_AFF},"Seules les {N_DESS_AFF} plus grosses affaires sont listées sur "'
+                   f'&{DS["nbAff"]}&".",IF(AND({DS["nom"]}<>"",{DS["nbAff"]}=0),"Aucune affaire affectée à ce '
+                   f'dessinateur dans le périmètre.",""))', font(9, True, "B45309"))
+
+# ---- occupation de l'équipe
+section(68, "OCCUPATION DE L'ÉQUIPE (charge fixe + projets, en % de la capacité)")
+box(70, 87, 0, NG - 1)
+put(71, 1, 57, "Vert : moins de 90 %   ·   Orange : de 90 à 100 %   ·   Rouge : au-delà de 100 % (surcharge)   ·   "
+               "les 12 premiers dessinateurs de la liste Data", font(8, color=GREY, italic=True))
+for i in range(1, NG - 1):
+    ws.cell(72, gc(i)).border = Border(bottom=side("B8C2CF"))
+put(72, 1, 9, "Dessinateur", font(8, True, MUTED))
+for m in range(N_MONTHS):
+    c1 = 10 + 4 * m
+    put(72, c1, c1 + 3, f"=Calculs!{TEAM_H[m]}3", font(8, True, GREY), h="center", fmt="mmm yy")
+for k in range(N_DESS):
+    r = 73 + k
+    cr = TEAM_R1 + k
+    put(r, 1, 9, f"=Calculs!{TEAM_NAME}{cr}", font(9, False, INK))
+    for m in range(N_MONTHS):
+        c1 = 10 + 4 * m
+        put(r, c1, c1 + 3, f"=Calculs!{TEAM_O[m]}{cr}", font(9, True, INK), h="center", fmt="0%")
+team_rng = f"{gl(10)}73:{gl(10 + 4 * N_MONTHS - 1)}{72 + N_DESS}"
+occ_cf(team_rng, f"{gl(10)}73")
+ws.conditional_formatting.add(f"{gl(1)}73:{gl(9)}{72 + N_DESS}",
+                              FormulaRule(formula=[f'AND(${gl(1)}73<>"",${gl(1)}73={DS["nom"]})'],
+                                          font=Font(bold=True, color=ACCENT),
+                                          fill=PatternFill("solid", start_color="EAF2FD", end_color="EAF2FD",
+                                                           bgColor="EAF2FD")))
+for j, (cr, label) in enumerate(((NA_ROW, "Charge non affectée (h)"),
+                                 (OTHER_ROW, "Autres dessinateurs (h)"))):
+    r = 73 + N_DESS + j
+    put(r, 1, 9, label, font(8.5, False, GREY, italic=True))
+    for m in range(N_MONTHS):
+        c1 = 10 + 4 * m
+        put(r, c1, c1 + 3, f"=Calculs!{TEAM_H[m]}{cr}", font(8.5, False, GREY), h="center", fmt='#,##0;;"–"')
+    if j == 0:
+        for i in range(1, NG - 1):
+            ws.cell(r, gc(i)).border = Border(top=side("D6DCE4"))
+
+D_NOTES = [
+    "Charge d'un dessinateur = charge fixe hors projet + heures des affaires où il figure en colonne K de l'onglet "
+    "Charge, réparties par mois comme sur le Dashboard (même périmètre, même répartition, mêmes 12 mois).",
+    "Toute la charge d'une affaire est comptée pour son dessinateur, même si un prestataire est indiqué en colonne L.  "
+    "Capacité et charge fixe : colonnes F et G de l'onglet Data, sinon valeurs par défaut du Dashboard.",
+    f'=IF({DS["nbListe"]}>{N_DESS},"Attention : la liste Data contient "&'
+    f'{DS["nbListe"]}&" dessinateurs, seuls les {N_DESS} premiers apparaissent dans le '
+    f'tableau d\'occupation (le choix du dessinateur en haut de page fonctionne pour tous).","")',
+]
+for i, t in enumerate(D_NOTES):
+    put(89 + i, 0, NG - 1, t, font(8, color=GREY if i < 2 else "B45309", italic=i < 2, bold=i == 2))
+
+ws.print_area = f"A1:{L(gc(NG))}{D_LAST}"
+ws.page_setup.orientation = "landscape"
+ws.page_setup.paperSize = ws.PAPERSIZE_A3
+ws.page_setup.scale = 90
+ws.row_breaks.append(Break(id=47))
+ws.page_margins.left = ws.page_margins.right = 0.3
+ws.page_margins.top = ws.page_margins.bottom = 0.4
 
 wb.active = wb.sheetnames.index("Dashboard")
 for sheet in wb.worksheets:
