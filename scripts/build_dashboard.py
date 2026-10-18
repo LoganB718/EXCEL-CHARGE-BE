@@ -95,13 +95,15 @@ LISTS = [  # (colonne, en-tête, nom de la liste, valeurs d'exemple)
     ("D", "Coordinateurs", "lst_Coordinateurs", ["Marc Dubois", "Isabelle Roux"]),
     ("E", "Dessinateurs projeteurs", "lst_Dessinateurs",
      ["Lucas Garnier", "Emma Faure", "Hugo Mercier", "Léa Chevalier", "Antoine Blanc"]),
-    ("H", "Prestataires (ressources externes)", "lst_Prestataires",
-     ["Alpha Ingénierie", "CAO Services Ouest", "Technidessin"]),
+    ("H", "Ressources externes (personnes)", "lst_Prestataires",
+     ["Paul Girard", "Inès Morel", "Karim Haddad"]),
 ]
-# Réglages propres à chaque dessinateur (même ligne que son nom en colonne E) ; vide = valeur par défaut
-DESS_COLS = [  # (colonne, en-tête, valeurs d'exemple alignées sur la liste des dessinateurs)
+# Réglages propres à chaque ressource (même ligne que son nom) ; vide = valeur par défaut du Dashboard
+DESS_COLS = [  # (colonne, en-tête, valeurs d'exemple alignées sur la liste correspondante)
     ("F", "Capacité mensuelle (h)\nvide = défaut", [None, None, None, 96, None]),
     ("G", "Charge fixe hors projet (h/mois)\nvide = défaut", [None, None, None, None, None]),
+    ("I", "Capacité mensuelle (h)\nvide = défaut", [None, None, None]),
+    ("J", "Charge fixe hors projet (h/mois)\nvide = défaut", [None, None, None]),
 ]
 DATA_LAST = 203
 
@@ -109,11 +111,12 @@ ws_data["A1"] = "LISTES DE RÉFÉRENCE"
 ws_data["A1"].font = font(14, True, NAVY)
 ws_data["A2"] = ("Saisir une valeur par cellule, sans ligne vide, sous chaque en-tête : les listes déroulantes "
                  "de l'onglet Charge se mettent à jour automatiquement (200 valeurs max par liste). "
-                 "Colonnes F et G : capacité et charge fixe propres à un dessinateur (vide = valeurs par défaut "
-                 "réglées en haut du Dashboard). Les valeurs ci-dessous sont des exemples à remplacer.")
+                 "Colonnes F-G et I-J : capacité et charge fixe propres à un dessinateur ou à une ressource "
+                 "externe (vide = valeurs par défaut réglées en haut du Dashboard). Les valeurs ci-dessous sont "
+                 "des exemples à remplacer.")
 ws_data["A2"].font = font(9, color=GREY, italic=True)
 ws_data["A2"].alignment = Alignment(wrap_text=True, vertical="top")
-ws_data.merge_cells("A2:H2")
+ws_data.merge_cells("A2:J2")
 ws_data.row_dimensions[2].height = 26
 ws_data.row_dimensions[3].height = 42
 for col, title, values in DESS_COLS:
@@ -133,10 +136,11 @@ for col, title, values in DESS_COLS:
     for j, v in enumerate(values):
         if v is not None:
             ws_data[f"{col}{4 + j}"] = v
-    dv = DataValidation(type="decimal", operator="between", formula1="1" if col == "F" else "0", formula2="744",
+    is_cap = col in ("F", "I")
+    dv = DataValidation(type="decimal", operator="between", formula1="1" if is_cap else "0", formula2="744",
                         allow_blank=True, showErrorMessage=True, errorTitle="Heures par mois",
                         error="Saisir un nombre d'heures par mois (ou laisser vide pour la valeur par défaut)."
-                              + (" La capacité doit être d'au moins 1 h." if col == "F" else ""))
+                              + (" La capacité doit être d'au moins 1 h." if is_cap else ""))
     dv.add(f"{col}4:{col}{DATA_LAST}")
     ws_data.add_data_validation(dv)
 ws_data["F7"].comment = Comment("Exemple : temps partiel 80 % → 96 h/mois au lieu de la capacité par défaut.",
@@ -172,19 +176,84 @@ CHARGE_COLS = [
     ("H", "Contraintes, spécifications, délais, budget", 34, None, None),
     ("I", "Autres informations pertinentes / suggestions d'optimisation des ressources", 34, None, None),
     ("J", "Coordinateur", 18, "lst_Coordinateurs", None),
-    ("K", "Dessinateur projeteur", 20, "lst_Dessinateurs", None),
-    ("L", "Ressources externes (prestataire)", 22, "lst_Prestataires", None),
+    ("K", "Dessinateur projeteur (interne)", 20, "lst_Dessinateurs", None),
+    ("L", "OU ressource externe", 20, "lst_Prestataires", None),
     ("M", "Charge de travail estimée (h)", 13, None, None),
     ("N", "Date de début planifiée", 13, None, "DD/MM/YYYY"),
     ("O", "Taux d'avancement", 13, None, "0%"),
 ]
 
+# Données d'exemple : une ligne = une ressource (dessinateur K OU ressource externe L) avec SES heures en M
+_ATL1 = ("Julie Martin", "ATLAS", "Lot 1 – Structure", "Châssis principal", "Étude de conception", date(2027, 3, 31),
+         "Conception du châssis mécano-soudé de la nouvelle gamme", "Masse < 450 kg ; budget étude 60 k€",
+         "Mutualiser les calculs RDM avec le lot 2", "Marc Dubois")
+_CAS2 = ("Sophie Lefèvre", "CASSIOPÉE", "Rétrofit ligne 2", "Poste de contrôle", "Étude de conception",
+         date(2027, 2, 26), "Nouveau poste de contrôle vision", None, None, "Marc Dubois")
+_DEL1 = ("Sophie Lefèvre", "DELTA", "Lot unique", "Bâti machine", "Industrialisation", date(2027, 6, 30),
+         "Industrialisation du bâti", "Cible coût -10 %", None, "Isabelle Roux")
+_PEG1 = ("Camille Laurent", "PÉGASE", "Lot 1", "Ensemble complet", "Étude de conception", date(2027, 9, 30),
+         "Étude complète si commande", "Sous réserve de commande", "Renfort externe prévu", "Marc Dubois")
+_DEL2 = ("Thomas Bernard", "DELTA", "Lot unique", "Habillage", "Étude de conception", date(2027, 8, 27),
+         "Habillage design", None, None, "Isabelle Roux")
+SAMPLE = [
+    _ATL1 + ("Lucas Garnier", None, 300, date(2026, 11, 2), 0.15),
+    _ATL1 + (None, "Paul Girard", 120, date(2026, 11, 2), 0),
+    ("Julie Martin", "ATLAS", "Lot 2 – Carénage", "Capots latéraux", "Étude de conception", date(2027, 5, 28),
+     "Dessin des capots et de leurs fixations", "Matière ABS, outillage existant", None, "Marc Dubois",
+     "Emma Faure", None, 260, date(2027, 1, 11), 0),
+    ("Julie Martin", "ATLAS", "Lot 3 – Intégration", "Faisceau électrique", "Industrialisation", date(2027, 7, 30),
+     "Routage des faisceaux et supports", "Normes NF C 15-100", None, "Marc Dubois",
+     None, "Inès Morel", 180, date(2027, 4, 5), 0),
+    ("Thomas Bernard", "BORÉAL", "Phase APD", "Groupe froid", "Étude de conception", date(2027, 1, 29),
+     "Avant-projet détaillé du groupe froid", "Délai client ferme", None, "Isabelle Roux", "Léa Chevalier",
+     None, 310, date(2026, 10, 5), 0.35),
+    ("Thomas Bernard", "BORÉAL", "Phase EXE", "Groupe froid", "Mise à jour de plans", date(2027, 4, 30),
+     "Plans d'exécution", "Budget 25 k€", None, "Isabelle Roux", "Léa Chevalier", None, 220,
+     date(2027, 2, 1), 0),
+    ("Thomas Bernard", "BORÉAL", "Phase EXE", "Armoire de commande", "Modification", date(2027, 3, 15),
+     "Reprise de l'armoire existante", None, None, "Isabelle Roux", None, "Karim Haddad", 90,
+     date(2027, 1, 18), 0),
+    ("Sophie Lefèvre", "CASSIOPÉE", "Rétrofit ligne 2", "Convoyeur", "Modification", date(2026, 12, 18),
+     "Adaptation du convoyeur au nouveau format", "Arrêt de ligne limité à 2 semaines",
+     "Réutiliser les plans de la ligne 1", "Marc Dubois", "Hugo Mercier", None, 150, date(2026, 10, 12), 0.5),
+    _CAS2 + ("Emma Faure", None, 160, date(2026, 12, 1), 0.05),
+    _CAS2 + (None, "Paul Girard", 80, date(2026, 12, 1), 0),
+    _DEL1 + ("Antoine Blanc", None, 240, date(2027, 2, 15), 0),
+    _DEL1 + ("Hugo Mercier", None, 120, date(2027, 2, 15), 0),
+    ("Nicolas Moreau", "ORION", "Tranche 1", "Support moteur", "Étude de conception", date(2026, 11, 27),
+     "Conception du support moteur", None, None, "Isabelle Roux", "Lucas Garnier", None, 120,
+     date(2026, 9, 14), 0.8),
+    ("Nicolas Moreau", "ORION", "Tranche 1", "Carter de protection", "Mise à jour de plans", date(2026, 10, 9),
+     "Mise à jour indice C", None, None, "Isabelle Roux", "Lucas Garnier", None, 40, date(2026, 9, 21), 1),
+    ("Nicolas Moreau", "ORION", "Tranche 2", "Support moteur", "Modification", date(2027, 5, 14),
+     "Évolution pour moteur 30 kW", None, None, "Isabelle Roux", "Emma Faure", None, 160, date(2027, 3, 1), 0),
+    ("Nicolas Moreau", "PÉGASE", "Avant-projet", "Ensemble complet", "Chiffrage / avant-projet",
+     date(2026, 12, 11), "Chiffrage et esquisses pour l'appel d'offres", "Remise d'offre le 15/12", None,
+     "Marc Dubois", "Léa Chevalier", None, 70, date(2026, 11, 16), 0.1),
+    _PEG1 + ("Hugo Mercier", None, 300, date(2027, 3, 15), 0),
+    _PEG1 + (None, "Karim Haddad", 180, date(2027, 3, 15), 0),
+    ("Camille Laurent", "VEGA", "Mise en conformité", "Garde-corps", "Modification", date(2027, 1, 15),
+     "Mise en conformité des garde-corps", "Norme NF E 85-015", None, "Isabelle Roux", "Antoine Blanc", None,
+     85, date(2026, 11, 23), 0),
+    ("Camille Laurent", "VEGA", "Mise en conformité", "Passerelle", "Mise à jour de plans", date(2027, 3, 31),
+     "Plans de recollement", None, None, "Isabelle Roux", "Antoine Blanc", None, 60, date(2027, 2, 8), 0),
+    ("Camille Laurent", "VEGA", "Mise en conformité", "Escalier d'accès", "Modification", date(2027, 4, 30),
+     "Mise en conformité de l'escalier d'accès", None, "Ressource à définir", "Isabelle Roux", None, None, 50,
+     date(2027, 3, 1), 0),
+    ("Julie Martin", "TITAN", "Lot 1", "Poutre de levage", "Étude de conception", date(2026, 9, 30),
+     "Note de calcul et plans", None, None, "Marc Dubois", "Lucas Garnier", None, 95, date(2026, 8, 24), 1),
+    _DEL2 + ("Emma Faure", None, 120, date(2027, 5, 3), 0),
+    _DEL2 + (None, "Inès Morel", 80, date(2027, 5, 3), 0),
+]
+assert all(len(row) == 15 for row in SAMPLE)
+
 ws = ws_charge
 ws["A1"] = "PLAN DE CHARGE — BUREAU D'ÉTUDES"
 ws["A1"].font = font(14, True, NAVY)
-ws["A2"] = ("Une ligne = une affaire.  Colonnes A à I : informations projet  ·  Colonnes J à O : affectation et "
-            "planification.  Listes déroulantes alimentées par l'onglet Data.  "
-            "Les lignes 4 à 21 sont des EXEMPLES FICTIFS à remplacer par vos données.")
+ws["A2"] = ("Une ligne = une ressource sur un sous-projet : un dessinateur (K) OU une ressource externe (L), "
+            "avec SES heures en M.  Plusieurs ressources sur le même sous-projet = plusieurs lignes (mêmes A à J).  "
+            "Listes déroulantes alimentées par l'onglet Data.  Les lignes 4 à "
+            f"{FIRST + len(SAMPLE) - 1} sont des EXEMPLES FICTIFS à remplacer par vos données.")
 ws["A2"].font = font(9, color=GREY, italic=True)
 ws.row_dimensions[1].height = 24
 ws.row_dimensions[3].height = 48
@@ -207,59 +276,6 @@ for col, title, width, _, fmt in CHARGE_COLS:
         if fmt:
             c.number_format = fmt
 
-SAMPLE = [
-    ("Julie Martin", "ATLAS", "Lot 1 – Structure", "Châssis principal", "Étude de conception", date(2027, 3, 31),
-     "Conception du châssis mécano-soudé de la nouvelle gamme", "Masse < 450 kg ; budget étude 60 k€",
-     "Mutualiser les calculs RDM avec le lot 2", "Marc Dubois", "Lucas Garnier", "Alpha Ingénierie", 420,
-     date(2026, 11, 2), 0.15),
-    ("Julie Martin", "ATLAS", "Lot 2 – Carénage", "Capots latéraux", "Étude de conception", date(2027, 5, 28),
-     "Dessin des capots et de leurs fixations", "Matière ABS, outillage existant", None, "Marc Dubois",
-     "Emma Faure", None, 260, date(2027, 1, 11), 0),
-    ("Julie Martin", "ATLAS", "Lot 3 – Intégration", "Faisceau électrique", "Industrialisation", date(2027, 7, 30),
-     "Routage des faisceaux et supports", "Normes NF C 15-100", "Prévoir un prestataire si pic en juin",
-     "Marc Dubois", "Hugo Mercier", "CAO Services Ouest", 180, date(2027, 4, 5), 0),
-    ("Thomas Bernard", "BORÉAL", "Phase APD", "Groupe froid", "Étude de conception", date(2027, 1, 29),
-     "Avant-projet détaillé du groupe froid", "Délai client ferme", None, "Isabelle Roux", "Léa Chevalier",
-     None, 310, date(2026, 10, 5), 0.35),
-    ("Thomas Bernard", "BORÉAL", "Phase EXE", "Groupe froid", "Mise à jour de plans", date(2027, 4, 30),
-     "Plans d'exécution", "Budget 25 k€", None, "Isabelle Roux", "Léa Chevalier", None, 220,
-     date(2027, 2, 1), 0),
-    ("Thomas Bernard", "BORÉAL", "Phase EXE", "Armoire de commande", "Modification", date(2027, 3, 15),
-     "Reprise de l'armoire existante", None, None, "Isabelle Roux", "Antoine Blanc", "Technidessin", 90,
-     date(2027, 1, 18), 0),
-    ("Sophie Lefèvre", "CASSIOPÉE", "Rétrofit ligne 2", "Convoyeur", "Modification", date(2026, 12, 18),
-     "Adaptation du convoyeur au nouveau format", "Arrêt de ligne limité à 2 semaines",
-     "Réutiliser les plans de la ligne 1", "Marc Dubois", "Hugo Mercier", None, 150, date(2026, 10, 12), 0.5),
-    ("Sophie Lefèvre", "CASSIOPÉE", "Rétrofit ligne 2", "Poste de contrôle", "Étude de conception",
-     date(2027, 2, 26), "Nouveau poste de contrôle vision", None, None, "Marc Dubois", "Emma Faure",
-     "Alpha Ingénierie", 240, date(2026, 12, 1), 0.05),
-    ("Sophie Lefèvre", "DELTA", "Lot unique", "Bâti machine", "Industrialisation", date(2027, 6, 30),
-     "Industrialisation du bâti", "Cible coût -10 %", None, "Isabelle Roux", "Antoine Blanc", None, 360,
-     date(2027, 2, 15), 0),
-    ("Nicolas Moreau", "ORION", "Tranche 1", "Support moteur", "Étude de conception", date(2026, 11, 27),
-     "Conception du support moteur", None, None, "Isabelle Roux", "Lucas Garnier", None, 120,
-     date(2026, 9, 14), 0.8),
-    ("Nicolas Moreau", "ORION", "Tranche 1", "Carter de protection", "Mise à jour de plans", date(2026, 10, 9),
-     "Mise à jour indice C", None, None, "Isabelle Roux", "Lucas Garnier", None, 40, date(2026, 9, 21), 1),
-    ("Nicolas Moreau", "ORION", "Tranche 2", "Support moteur", "Modification", date(2027, 5, 14),
-     "Évolution pour moteur 30 kW", None, None, "Isabelle Roux", "Emma Faure", None, 160, date(2027, 3, 1), 0),
-    ("Nicolas Moreau", "PÉGASE", "Avant-projet", "Ensemble complet", "Chiffrage / avant-projet",
-     date(2026, 12, 11), "Chiffrage et esquisses pour l'appel d'offres", "Remise d'offre le 15/12", None,
-     "Marc Dubois", "Léa Chevalier", None, 70, date(2026, 11, 16), 0.1),
-    ("Camille Laurent", "PÉGASE", "Lot 1", "Ensemble complet", "Étude de conception", date(2027, 9, 30),
-     "Étude complète si commande", "Sous réserve de commande", "Prévoir un renfort externe", "Marc Dubois",
-     "Hugo Mercier", "Technidessin", 480, date(2027, 3, 15), 0),
-    ("Camille Laurent", "VEGA", "Mise en conformité", "Garde-corps", "Modification", date(2027, 1, 15),
-     "Mise en conformité des garde-corps", "Norme NF E 85-015", None, "Isabelle Roux", "Antoine Blanc", None,
-     85, date(2026, 11, 23), 0),
-    ("Camille Laurent", "VEGA", "Mise en conformité", "Passerelle", "Mise à jour de plans", date(2027, 3, 31),
-     "Plans de recollement", None, None, "Isabelle Roux", "Antoine Blanc", None, 60, date(2027, 2, 8), 0),
-    ("Julie Martin", "TITAN", "Lot 1", "Poutre de levage", "Étude de conception", date(2026, 9, 30),
-     "Note de calcul et plans", None, None, "Marc Dubois", "Lucas Garnier", None, 95, date(2026, 8, 24), 1),
-    ("Thomas Bernard", "DELTA", "Lot unique", "Habillage", "Étude de conception", date(2027, 8, 27),
-     "Habillage design", None, None, "Isabelle Roux", "Emma Faure", "CAO Services Ouest", 200,
-     date(2027, 5, 3), 0),
-]
 for i, row in enumerate(SAMPLE):
     r = FIRST + i
     for (col, *_), v in zip(CHARGE_COLS, row):
@@ -304,6 +320,13 @@ ws.conditional_formatting.add(f"N{FIRST}:N{LAST}",
 ws.conditional_formatting.add(f"O{FIRST}:O{LAST}",
                               DataBarRule(start_type="num", start_value=0, end_type="num", end_value=1,
                                           color="86B6EF", showValue=True))
+# une ressource par ligne : rouge si dessinateur ET ressource externe, orange si aucune ressource
+ws.conditional_formatting.add(f"K{FIRST}:L{LAST}",
+                              FormulaRule(formula=[f'AND(TRIM($K{FIRST})<>"",TRIM($L{FIRST})<>"")'], stopIfTrue=True,
+                                          fill=miss, font=Font(color=RED_T, bold=True)))
+ws.conditional_formatting.add(f"K{FIRST}:L{LAST}",
+                              FormulaRule(formula=[f'AND(TRIM($B{FIRST})<>"",TRIM($K{FIRST})="",TRIM($L{FIRST})="")'],
+                                          fill=warn))
 
 # ---------------------------------------------------------------- Dashboard : paramètres (nommés)
 GRID0 = 2          # colonne Excel de la 1re colonne de la grille (B)
@@ -410,14 +433,14 @@ for m, mc in enumerate(MCOLS):
 K = {}
 INDICATORS = [
     ("total", "Charge totale identifiée (h)", f"=SUM(E{R1}:E{R2})", "#,##0.0"),
-    ("nbAff", "Nombre d'affaires", f"=SUM(D{R1}:D{R2})", "0"),
+    ("nbAff", "Nombre d'affaires (sous-projets regroupés)", f"=SUM(EO{R1}:EO{R2})", "0"),
     ("nbChefs", "Nombre de chefs de projet", f"=SUM(M{R1}:M{R2})", "0"),
     ("nbProj", "Nombre de projets", f"=SUM(P{R1}:P{R2})", "0"),
     ("nbTypes", "Nombre de types", f"=SUM(S{R1}:S{R2})", "0"),
     ("realise", "Charge réalisée (selon avancement)", f"=SUMPRODUCT(E{R1}:E{R2},C{R1}:C{R2})", "#,##0.0"),
     ("reste", "Reste à faire (h)", "=AL4-AL9", "#,##0.0"),
-    ("avgSimple", "Avancement moyen (simple)",
-     f"=IF(AL5=0,0,SUMPRODUCT(D{R1}:D{R2},C{R1}:C{R2})/AL5)", "0.0%"),
+    ("avgSimple", "Avancement moyen (moyenne simple des affaires)",
+     f"=IF(AL5=0,0,SUM(EU{R1}:EU{R2})/AL5)", "0.0%"),
     ("avgPond", "Avancement moyen pondéré par la charge", "=IF(AL4=0,0,AL9/AL4)", "0.0%"),
     ("autoStart", "1er mois automatique (1er début planifié)",
      f"=IF(COUNT(I{R1}:I{R2})=0,DATE(YEAR(TODAY()),MONTH(TODAY()),1),"
@@ -435,7 +458,7 @@ INDICATORS = [
     ("totalETP", "Charge totale en ETP-mois", "=IF(N(p_HeuresETP)-N(p_ChargeFixe)<=0,0,AL4/(p_HeuresETP-p_ChargeFixe))",
      "0.0"),
     ("bigIdx", "Position de la plus grosse affaire", "=BX4", "0"),
-    ("nbTermines", "Affaires terminées (avancement 100 %)", f"=COUNTIFS(B{R1}:B{R2},1,C{R1}:C{R2},\">=1\")", "0"),
+    ("nbTermines", "Lignes terminées (avancement 100 %)", f"=COUNTIFS(B{R1}:B{R2},1,C{R1}:C{R2},\">=1\")", "0"),
     ("finPeriode", "Dernier mois affiché", f"=EDATE(AL14,{N_MONTHS - 1})", "MMM YYYY"),
     ("picPart", "Part du mois de pic dans la charge de la période", "=IF(AL15=0,0,AL17/AL15)", "0%"),
 ]
@@ -469,7 +492,8 @@ for m, mc in enumerate(MCOLS):
     ws[f"AO{r}"].number_format = "MMM YYYY"
     ws[f"AP{r}"] = f"=SUM({mc}{R1}:{mc}{R2})"
     ws[f"AP{r}"].number_format = "#,##0.0"
-    ws[f"AQ{r}"] = f'=COUNTIF({mc}{R1}:{mc}{R2},">0")'
+    ws[f"AQ{r}"] = (f"=SUMPRODUCT(({mc}{R1}:{mc}{R2}>0)/(COUNTIFS($EN${R1}:$EN${R2},$EN${R1}:$EN${R2},"
+                     f"{mc}{R1}:{mc}{R2},\">0\")+({mc}{R1}:{mc}{R2}<=0)))")
 
 # Matrice des groupes de couleur (AS..BH) : séries des graphiques
 SM = [L(49 + m) for m in range(N_MONTHS)]  # AW..BH
@@ -541,10 +565,49 @@ for c, t in zip(("BW", "BX"), ("Rang", "Position dans Charge")):
 for k in range(1, N_TABLE + 1):
     r = 3 + k
     ws[f"BW{r}"] = k
-    ws[f"BX{r}"] = f'=IFERROR(MATCH(BW{r},$L${R1}:$L${R2},0),"")'
+    ws[f"BX{r}"] = f'=IFERROR(MATCH(BW{r},$EQ${R1}:$EQ${R2},0),"")'
 
-# ---- Charge par dessinateur
-N_DESS = 12          # dessinateurs affichés dans le tableau d'occupation de l'équipe
+# ---- Affaires = sous-projets regroupés (projet + sous-projet + produit), toutes ressources confondues
+AFF_COLS = [("EM", "Type de ressource de la ligne"), ("EN", "Clé affaire (projet | sous-projet | produit)"),
+            ("EO", "1re ligne de l'affaire"), ("EP", "Charge de l'affaire (h)"), ("EQ", "Rang de l'affaire"),
+            ("ER", "Ressources internes"), ("ES", "Ressources externes"), ("ET", "Ressources (texte)"),
+            ("EU", "Avancement de l'affaire (pondéré par les heures)"), ("EV", "Début de la ligne (31/12/9999 = vide)"),
+            ("EW", "Début de l'affaire (le plus tôt)"), ("EX", "Besoin de la ligne (0 = vide)"),
+            ("EY", "Besoin de l'affaire (le plus tard)")]
+for c, t in AFF_COLS:
+    ws[f"{c}3"] = t
+    ws[f"{c}3"].font = hdr_font
+    ws[f"{c}3"].fill = fill(NAVY)
+    ws[f"{c}3"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+    ws.column_dimensions[c].width = 13
+ws.column_dimensions["EN"].width = 30
+A_RNG = {c: f"${c}${R1}:${c}${R2}" for c in ("C", "E", "EM", "EN", "EO", "EP", "EV", "EX")}
+for r in range(R1, R2 + 1):
+    ws[f"EM{r}"] = (f'=IF(D{r}=1,IF(TRIM(Charge!K{r})<>"","Interne",IF(TRIM(Charge!L{r})<>"","Externe",'
+                    f'"Non affecté")),"")')
+    ws[f"EN{r}"] = (f'=IF(D{r}=1,LEFT(TRIM(Charge!B{r})&" | "&TRIM(Charge!C{r})&" | "&TRIM(Charge!D{r}),240),"")')
+    ws[f"EO{r}"] = f'=IF(EN{r}="",0,IF(COUNTIF($EN${R1}:EN{r},EN{r})=1,1,0))'
+    ws[f"EP{r}"] = f'=IF(EO{r}=1,SUMIF({A_RNG["EN"]},EN{r},{A_RNG["E"]}),"")'
+    ws[f"EQ{r}"] = (f'=IF(EO{r}=1,COUNTIFS({A_RNG["EO"]},1,{A_RNG["EP"]},">"&EP{r})'
+                    f'+COUNTIFS($EO${R1}:EO{r},1,$EP${R1}:EP{r},EP{r}),"")')
+    ws[f"ER{r}"] = f'=IF(EO{r}=1,COUNTIFS({A_RNG["EN"]},EN{r},{A_RNG["EM"]},"Interne"),"")'
+    ws[f"ES{r}"] = f'=IF(EO{r}=1,COUNTIFS({A_RNG["EN"]},EN{r},{A_RNG["EM"]},"Externe"),"")'
+    ws[f"ET{r}"] = (f'=IF(EO{r}=1,IF(ER{r}+ES{r}=0,"à affecter",IF(ER{r}=0,ES{r}&" ext.",'
+                    f'(ER{r}+ES{r})&IF(ES{r}>0," dont "&ES{r}&" ext.",""))),"")')
+    ws[f"EU{r}"] = (f'=IF(EO{r}=1,IF(EP{r}>0,SUMPRODUCT(({A_RNG["EN"]}=EN{r})*{A_RNG["E"]}*{A_RNG["C"]})/EP{r},'
+                    f'AVERAGEIF({A_RNG["EN"]},EN{r},{A_RNG["C"]})),"")')
+    ws[f"EV{r}"] = f"=IF(ISNUMBER(I{r}),I{r},2958465)"
+    ws[f"EW{r}"] = (f'=IF(EO{r}=1,SUMPRODUCT(MIN(({A_RNG["EN"]}=EN{r})*{A_RNG["EV"]}'
+                    f'+({A_RNG["EN"]}<>EN{r})*2958465)),"")')
+    ws[f"EX{r}"] = f"=IF(AND(D{r}=1,ISNUMBER(Charge!F{r})),Charge!F{r},0)"
+    ws[f"EY{r}"] = f'=IF(EO{r}=1,SUMPRODUCT(MAX(({A_RNG["EN"]}=EN{r})*{A_RNG["EX"]})),"")'
+    ws[f"EP{r}"].number_format = "0.0"
+    ws[f"EU{r}"].number_format = "0%"
+    for c in ("EV", "EW", "EX", "EY"):
+        ws[f"{c}{r}"].number_format = "DD/MM/YYYY"
+
+# ---- Charge par ressource (dessinateur interne ou ressource externe)
+N_DESS = 16          # ressources affichées dans le tableau d'occupation de l'équipe
 N_DESS_AFF = 15      # affaires listées pour le dessinateur sélectionné
 NA_LABEL = "(non affecté)"
 
@@ -559,10 +622,11 @@ def hdr(col, text, width=None):
 
 
 # par ligne : dessinateur (affaires du périmètre) et rang parmi les affaires du dessinateur sélectionné
-hdr("BZ", "Dessinateur (périmètre)", 16)
+hdr("BZ", "Ressource de la ligne (K sinon L)", 16)
 hdr("CA", "Rang affaire du dessinateur sélectionné", 12)
 for r in range(R1, R2 + 1):
-    ws[f"BZ{r}"] = f'=IF(D{r}=1,IF(TRIM(Charge!K{r})="","{NA_LABEL}",TRIM(Charge!K{r})),"")'
+    ws[f"BZ{r}"] = (f'=IF(D{r}=1,IF(TRIM(Charge!K{r})<>"",TRIM(Charge!K{r}),IF(TRIM(Charge!L{r})<>"",'
+                    f'TRIM(Charge!L{r}),"{NA_LABEL}")),"")')
     ws[f"CA{r}"] = (f'=IF(AND($CD$4<>"",BZ{r}=$CD$4),COUNTIFS($BZ${R1}:$BZ${R2},$CD$4,$L${R1}:$L${R2},"<"&L{r})+1,"")')
 
 # noms des dessinateurs de la liste Data, sans espaces superflus (EJ)
@@ -570,23 +634,39 @@ hdr("EJ", "Dessinateurs Data (nettoyés)", 18)
 for d in range(4, DATA_LAST + 1):
     ws[f"EJ{d}"] = f"=TRIM(Data!$E${d})"
 DATA_NAMES = f"$EJ$4:$EJ${DATA_LAST}"
+hdr("EK", "Ressources externes Data (nettoyées)", 18)
+for d in range(4, DATA_LAST + 1):
+    ws[f"EK{d}"] = f"=TRIM(Data!$H${d})"
+DATA_EXT = f"$EK$4:$EK${DATA_LAST}"
+N_RES = 2 * (DATA_LAST - 3)   # capacité de la liste commune (dessinateurs puis externes)
+hdr("FA", "Ressources : dessinateurs puis externes (liste déroulante)", 22)
+hdr("FB", "Type", 10)
+for k in range(1, N_RES + 1):
+    r = 3 + k
+    ws[f"FA{r}"] = (f'=IF({k}<=$CD$23,INDEX({DATA_NAMES},{k}),IF({k}-$CD$23<=$CD$26,'
+                    f'INDEX({DATA_EXT},{k}-$CD$23),""))')
+    ws[f"FB{r}"] = f'=IF(FA{r}="","",IF({k}<=$CD$23,"Interne","Externe"))'
+wb.defined_names["lst_Ressources"] = DefinedName(
+    "lst_Ressources", attr_text="OFFSET(Calculs!$FA$4,0,0,MAX(1,Calculs!$CD$23+Calculs!$CD$26),1)")
 
 # dessinateur sélectionné : réglages et indicateurs (CC libellé / CD valeur)
 DS = {}
 DESS_IND = [
-    ("nom", "Dessinateur sélectionné", "=TRIM(p_Dessinateur)", "General"),
-    ("pos", "Position dans la liste Data (0 = absent)",
+    ("nom", "Ressource sélectionnée", "=TRIM(p_Dessinateur)", "General"),
+    ("pos", "Position dans la liste des dessinateurs (0 = absent)",
      f"=IF(CD4=\"\",0,IFERROR(MATCH(CD4,{DATA_NAMES},0),0))", "0"),
     ("cap", "Capacité mensuelle (h)",
-     f"=IF(CD4=\"\",0,IF(CD5=0,p_HeuresETP,IF(ISNUMBER(INDEX(Data!$F$4:$F${DATA_LAST},CD5)),"
-     f"INDEX(Data!$F$4:$F${DATA_LAST},CD5),p_HeuresETP)))", "#,##0.0"),
+     f"=IF(CD4=\"\",0,IF(CD5>0,IF(ISNUMBER(INDEX(Data!$F$4:$F${DATA_LAST},CD5)),"
+     f"INDEX(Data!$F$4:$F${DATA_LAST},CD5),p_HeuresETP),IF(CD24>0,IF(ISNUMBER(INDEX(Data!$I$4:$I${DATA_LAST},CD24)),"
+     f"INDEX(Data!$I$4:$I${DATA_LAST},CD24),p_HeuresETP),p_HeuresETP)))", "#,##0.0"),
     ("fixe", "Charge fixe hors projet (h/mois)",
-     f"=IF(CD4=\"\",0,IF(CD5=0,p_ChargeFixe,IF(ISNUMBER(INDEX(Data!$G$4:$G${DATA_LAST},CD5)),"
-     f"INDEX(Data!$G$4:$G${DATA_LAST},CD5),p_ChargeFixe)))", "#,##0.0"),
+     f"=IF(CD4=\"\",0,IF(CD5>0,IF(ISNUMBER(INDEX(Data!$G$4:$G${DATA_LAST},CD5)),"
+     f"INDEX(Data!$G$4:$G${DATA_LAST},CD5),p_ChargeFixe),IF(CD24>0,IF(ISNUMBER(INDEX(Data!$J$4:$J${DATA_LAST},CD24)),"
+     f"INDEX(Data!$J$4:$J${DATA_LAST},CD24),p_ChargeFixe),p_ChargeFixe)))", "#,##0.0"),
     ("capProj", "Capacité disponible pour les projets (h/mois)", "=MAX(0,CD6-CD7)", "#,##0.0"),
     ("chargeTot", "Charge projets affectée, toutes périodes (h)",
      f'=IF(CD4="",0,SUMIF($BZ${R1}:$BZ${R2},CD4,$E${R1}:$E${R2}))', "#,##0.0"),
-    ("nbAff", "Nombre d'affaires affectées", f'=IF(CD4="",0,COUNTIF($BZ${R1}:$BZ${R2},CD4))', "0"),
+    ("nbAff", "Nombre de lignes affectées", f'=IF(CD4="",0,COUNTIF($BZ${R1}:$BZ${R2},CD4))', "0"),
     ("periode", "Charge projets sur la période affichée (h)", "=SUM(CI4:CI15)", "#,##0.0"),
     ("pic", "Mois le plus chargé : charge totale (h)", "=MAX(CJ4:CJ15)", "#,##0.0"),
     ("picIdx", "Rang du mois le plus chargé", "=MATCH(CD12,CJ4:CJ15,0)", "0"),
@@ -600,6 +680,12 @@ DESS_IND = [
     ("perim", "Périmètre (rappel)", "=p_Perimetre", "General"),
     ("debut", "1er mois affiché (rappel)", "=$AL$14", "MMM YYYY"),
     ("nbListe", "Nombre de dessinateurs dans la liste Data", f"=COUNTA(Data!$E$4:$E${DATA_LAST})", "0"),
+    ("posExt", "Position dans la liste des ressources externes (0 = absent)",
+     f"=IF(OR(CD4=\"\",CD5>0),0,IFERROR(MATCH(CD4,{DATA_EXT},0),0))", "0"),
+    ("type", "Type de ressource", '=IF(CD4="","",IF(CD5>0,"Interne",IF(CD24>0,"Externe","Hors liste")))', "General"),
+    ("nbExt", "Nombre de ressources externes dans la liste Data", f"=COUNTA(Data!$H$4:$H${DATA_LAST})", "0"),
+    ("nbDouble", "Lignes avec un dessinateur ET une ressource externe (à corriger)",
+     f'=SUMPRODUCT(($B${R1}:$B${R2}=1)*(TRIM(Charge!$K${R1}:$K${R2})<>"")*(TRIM(Charge!$L${R1}:$L${R2})<>""))', "0"),
 ]
 hdr("CC", "Dessinateur sélectionné", 40)
 hdr("CD", "Valeur", 14)
@@ -609,7 +695,8 @@ for i, (key, label, formula, fmt) in enumerate(DESS_IND):
     ws[f"CC{r}"] = label
     ws[f"CD{r}"] = formula
     ws[f"CD{r}"].number_format = fmt
-for k, row in {"nom": 4, "pos": 5, "cap": 6, "fixe": 7, "pic": 12, "picIdx": 13, "nbSur": 16}.items():
+for k, row in {"nom": 4, "pos": 5, "cap": 6, "fixe": 7, "pic": 12, "picIdx": 13, "nbSur": 16, "nbListe": 23,
+               "posExt": 24, "nbExt": 26}.items():
     assert DS[k] == f"Calculs!$CD${row}", k
 
 # charge mensuelle du dessinateur sélectionné (CF..CQ, une ligne par mois)
@@ -645,7 +732,7 @@ TEAM_O = [L(101 + N_MONTHS + m) for m in range(N_MONTHS)]  # DI..DT : occupation
 TEAM_MAX = L(101 + 2 * N_MONTHS)                        # DU
 TEAM_TOT = L(102 + 2 * N_MONTHS)                        # DV
 hdr("CS", "N°", 6)
-hdr(TEAM_NAME, "Dessinateur", 18)
+hdr(TEAM_NAME, "Ressource", 18)
 hdr(TEAM_CAP, "Capacité (h)", 10)
 hdr(TEAM_FIX, "Charge fixe (h)", 10)
 for m in range(N_MONTHS):
@@ -665,12 +752,14 @@ NA_ROW = TEAM_R2 + 1
 OTHER_ROW = TEAM_R2 + 2
 for k in range(1, N_DESS + 1):
     r = TEAM_R1 + k - 1
-    d = 3 + k   # ligne correspondante dans Data
-    ws[f"CS{r}"] = k
-    dup = f"COUNTIF($EJ$4:EJ{d - 1},EJ{d})>0" if d > 4 else "FALSE"
-    ws[f"{TEAM_NAME}{r}"] = f'=IF(OR(EJ{d}="",{dup}),"",EJ{d})'
-    ws[f"{TEAM_CAP}{r}"] = f'=IF({TEAM_NAME}{r}="","",IF(ISNUMBER(Data!$F${d}),Data!$F${d},p_HeuresETP))'
-    ws[f"{TEAM_FIX}{r}"] = f'=IF({TEAM_NAME}{r}="","",IF(ISNUMBER(Data!$G${d}),Data!$G${d},p_ChargeFixe))'
+    ws[f"CS{r}"] = k   # même rang que la liste commune FA/FB (ligne r)
+    dup = f"COUNTIF($FA$4:FA{r - 1},FA{r})>0" if r > 4 else "FALSE"
+    ws[f"{TEAM_NAME}{r}"] = f'=IF(OR(FA{r}="",{dup}),"",FA{r})'
+    for col_t, d_int, d_ext, dflt in ((TEAM_CAP, "F", "I", "p_HeuresETP"), (TEAM_FIX, "G", "J", "p_ChargeFixe")):
+        v_int = f"INDEX(Data!${d_int}$4:${d_int}${DATA_LAST},{k})"
+        v_ext = f"INDEX(Data!${d_ext}$4:${d_ext}${DATA_LAST},{k}-$CD$23)"
+        ws[f"{col_t}{r}"] = (f'=IF({TEAM_NAME}{r}="","",IF(FB{r}="Interne",IF(ISNUMBER({v_int}),{v_int},{dflt}),'
+                             f'IF(ISNUMBER({v_ext}),{v_ext},{dflt})))')
     for m in range(N_MONTHS):
         h, o, mc = TEAM_H[m], TEAM_O[m], MCOLS[m]
         ws[f"{h}{r}"] = f'=IF(${TEAM_NAME}{r}="","",SUMIF($BZ${R1}:$BZ${R2},${TEAM_NAME}{r},{mc}${R1}:{mc}${R2}))'
@@ -684,7 +773,7 @@ for k in range(1, N_DESS + 1):
     ws[f"{TEAM_TOT}{r}"] = f'=IF({TEAM_NAME}{r}="","",SUM({TEAM_H[0]}{r}:{TEAM_H[-1]}{r}))'
     ws[f"{TEAM_TOT}{r}"].number_format = "#,##0.0"
 ws[f"{TEAM_NAME}{NA_ROW}"] = NA_LABEL
-ws[f"{TEAM_NAME}{OTHER_ROW}"] = "Autres (absents de la liste Data ou au-delà du 12e)"
+ws[f"{TEAM_NAME}{OTHER_ROW}"] = f"Autres (absents des listes Data ou au-delà du {N_DESS}e)"
 for m in range(N_MONTHS):
     h, mc = TEAM_H[m], MCOLS[m]
     ws[f"{h}{NA_ROW}"] = f'=SUMIF($BZ${R1}:$BZ${R2},"{NA_LABEL}",{mc}${R1}:{mc}${R2})'
@@ -920,28 +1009,31 @@ IDX = K["bigIdx"]
 pop_lab = font(8.5, color="AEB9CC")
 pop_val = font(9.5, True, WHITE)
 put(11, c1 + 1, c2 - 1, "★  PLUS GROSSE AFFAIRE", font(9, True, AMBER), bg=NAVY)
-put(12, c1 + 1, c2 - 1, f'=IF({IDX}="",0,INDEX(Calculs!$E${R1}:$E${R2},{IDX}))', font(24, True, WHITE),
+put(12, c1 + 1, c2 - 1, f'=IF({IDX}="",0,INDEX(Calculs!$EP${R1}:$EP${R2},{IDX}))', font(24, True, WHITE),
     fmt=H_FMT, bg=NAVY)
-put(13, c1 + 1, c2 - 1, f'=IF(OR({IDX}="",{K["total"]}=0),0,INDEX(Calculs!$E${R1}:$E${R2},{IDX})/{K["total"]})',
+put(13, c1 + 1, c2 - 1, f'=IF(OR({IDX}="",{K["total"]}=0),0,INDEX(Calculs!$EP${R1}:$EP${R2},{IDX})/{K["total"]})',
     font(8.5, color="C9D3E3"), fmt='"soit "0%" de la charge identifiée"', bg=NAVY)
 for i in range(c1 + 1, c2):
     ws.cell(14, gc(i)).border = Border(bottom=side("3B4A6B"))
-POP = [
-    ("Projet", "B", "text"), ("Sous-projet", "C", "text"), ("Produit", "D", "text"),
-    ("Chef de projet", "A", "text"), ("Type", "E", "text"), ("Début planifié", "N", "date"),
-    ("Date de besoin", "F", "date"), ("Avancement", "O", "pct"),
+POP = [  # (libellé, colonne source, onglet source, type) — affaire = sous-projet regroupé
+    ("Projet", "B", "Charge", "text"), ("Sous-projet", "C", "Charge", "text"), ("Produit", "D", "Charge", "text"),
+    ("Chef de projet", "A", "Charge", "text"), ("Ressources", "ET", "Calculs", "text"),
+    ("Début planifié", "EW", "Calculs", "debut"), ("Date de besoin", "EY", "Calculs", "besoin"),
+    ("Avancement", "EU", "Calculs", "pct"),
 ]
-for k, (lab, col, kind) in enumerate(POP):
+for k, (lab, col, sheet, kind) in enumerate(POP):
     r = 15 + k
     put(r, c1 + 1, c1 + 5, lab, pop_lab, bg=NAVY)
-    src = f"INDEX(Charge!${col}${R1}:${col}${R2},{IDX})"
+    src = f"INDEX({sheet}!${col}${R1}:${col}${R2},{IDX})"
     if kind == "text":
         formula, fmt = f'=IF({IDX}="","—",{src}&"")', None
-    elif kind == "date":
-        formula, fmt = f'=IF({IDX}="","",IF(ISNUMBER({src}),{src},"—"))', "DD/MM/YYYY"
+    elif kind == "debut":
+        formula, fmt = f'=IF({IDX}="","",IF({src}>=2958465,"—",{src}))', "DD/MM/YYYY"
+    elif kind == "besoin":
+        formula, fmt = f'=IF({IDX}="","",IF({src}=0,"—",{src}))', "DD/MM/YYYY"
     else:
-        formula, fmt = f'=IF({IDX}="","",INDEX(Calculs!$C${R1}:$C${R2},{IDX}))', "0%"
-    put(r, c1 + 6, c2 - 1, formula, pop_val, fmt=fmt, bg=NAVY)
+        formula, fmt = f'=IF({IDX}="","",{src})', "0%"
+    put(r, c1 + 6, c2 - 1, formula, pop_val, fmt=fmt, bg=NAVY, shrink=True)
 
 # ---- Section 2 : indicateurs clés
 section(25, "INDICATEURS CLÉS")
@@ -960,8 +1052,8 @@ KPIS = [
      (f"={K['picPart']}", '0%" de la charge sur 12 mois"')),
     ("NOMBRE D'AFFAIRES", f"={K['nbAff']}", "0",
      (f"={K['nbProj']}", '"réparties sur "0" projet(s)"'),
-     (f'=IF(p_Perimetre="{PERIM_ALL}","dont "&{K["nbTermines"]}&" terminée(s)",'
-      f'{K["nbTermines"]}&" terminée(s) non comptée(s)")', None)),
+     (f'=IF(p_Perimetre="{PERIM_ALL}","dont "&{K["nbTermines"]}&" ligne(s) terminée(s)",'
+      f'{K["nbTermines"]}&" ligne(s) terminée(s) non comptée(s)")', None)),
     ("TAUX D'AVANCEMENT MOYEN", f"={K['avgSimple']}", "0%",
      (f"={K['avgPond']}", '"Pondéré par la charge : "0%'),
      ("moyenne simple par affaire", None)),
@@ -1107,13 +1199,14 @@ donut.anchor = anchor(DN[0], CH_R1, DN[1], CH_R2)
 ws.add_chart(donut)
 
 # ---- Section 4 : liste des affaires
-section(57, "LISTE DES AFFAIRES (par charge décroissante)")
+section(57, "LISTE DES AFFAIRES (un sous-projet par ligne, toutes ressources regroupées, par charge décroissante)")
 TCOLS = [  # (titre, nb colonnes de grille, alignement, format)
     ("N°", 2, "center", "0"),
-    ("Projet", 9, "left", None),
-    ("Sous-projet", 9, "left", None),
-    ("Produit", 9, "left", None),
-    ("Chef de projet", 8, "left", None),
+    ("Projet", 8, "left", None),
+    ("Sous-projet", 8, "left", None),
+    ("Produit", 8, "left", None),
+    ("Chef de projet", 7, "left", None),
+    ("Ressources", 4, "center", None),
     ("Charge (h)", 5, "right", "#,##0"),
     ("% de la charge totale", 6, "right", "0.0%"),
     ("Avancement", 6, "right", "0%"),
@@ -1142,15 +1235,17 @@ for k in range(1, N_TABLE + 1):
         f'=IF({idx}="","",INDEX(Charge!$C${R1}:$C${R2},{idx})&"")',
         f'=IF({idx}="","",INDEX(Charge!$D${R1}:$D${R2},{idx})&"")',
         f'=IF({idx}="","",INDEX(Charge!$A${R1}:$A${R2},{idx})&"")',
-        f'=IF({idx}="","",INDEX(Calculs!$E${R1}:$E${R2},{idx}))',
-        f'=IF({idx}="","",IF({K["total"]}=0,0,INDEX(Calculs!$E${R1}:$E${R2},{idx})/{K["total"]}))',
-        f'=IF({idx}="","",INDEX(Calculs!$C${R1}:$C${R2},{idx}))',
-        f'=IF({idx}="","",IF(ISNUMBER(INDEX(Charge!$N${R1}:$N${R2},{idx})),'
-        f'INDEX(Charge!$N${R1}:$N${R2},{idx}),"à planifier"))',
+        f'=IF({idx}="","",INDEX(Calculs!$ET${R1}:$ET${R2},{idx}))',
+        f'=IF({idx}="","",INDEX(Calculs!$EP${R1}:$EP${R2},{idx}))',
+        f'=IF({idx}="","",IF({K["total"]}=0,0,INDEX(Calculs!$EP${R1}:$EP${R2},{idx})/{K["total"]}))',
+        f'=IF({idx}="","",INDEX(Calculs!$EU${R1}:$EU${R2},{idx}))',
+        f'=IF({idx}="","",IF(INDEX(Calculs!$EW${R1}:$EW${R2},{idx})>=2958465,"à planifier",'
+        f'INDEX(Calculs!$EW${R1}:$EW${R2},{idx})))',
     ]
     for (title, w, al, fmt), (s1, s2), formula in zip(TCOLS, spans, vals):
         bold = title in ("Projet",)
-        put(r, s1, s2, formula, font(9, bold, INK if title != "N°" else GREY), h=al, fmt=fmt, indent=1 if al != "center" else 0)
+        put(r, s1, s2, formula, font(9, bold, INK if title != "N°" else GREY), h=al, fmt=fmt,
+            indent=1 if al != "center" else 0, shrink=title == "Ressources")
 
 first_cell = f"{gl(0)}{TABLE_R1}"
 tbl_range = f"{gl(0)}{TABLE_R1}:{gl(NG - 1)}{TABLE_R2}"
@@ -1162,8 +1257,9 @@ ws.conditional_formatting.add(
     tbl_range,
     FormulaRule(formula=[f'${gl(0)}{TABLE_R1}<>""'], border=Border(bottom=row_line),
                 fill=PatternFill("solid", start_color=WHITE, end_color=WHITE, bgColor=WHITE)))
-pct_col = gl(spans[6][0])
-adv_col = gl(spans[7][0])
+pct_col = gl(spans[7][0])
+adv_col = gl(spans[8][0])
+assert TCOLS[7][0].startswith("%") and TCOLS[8][0] == "Avancement"
 ws.conditional_formatting.add(f"{pct_col}{TABLE_R1}:{pct_col}{TABLE_R2}",
                               DataBarRule(start_type="num", start_value=0, end_type="max",
                                           color="86B6EF", showValue=True))
@@ -1174,10 +1270,12 @@ ws.conditional_formatting.add(f"{adv_col}{TABLE_R1}:{adv_col}{TABLE_R2}",
 NOTE_R = TABLE_R2 + 2
 put(NOTE_R, 0, NG - 1,
     f'=IF({K["nbAff"]}>{N_TABLE},"Attention : seules les {N_TABLE} premières affaires (par charge) sont '
-    f'listées sur "&{K["nbAff"]}&".","")', font(9, True, "B45309"))
+    f'listées sur "&{K["nbAff"]}&".",IF(Calculs!$CD$27>0,"Attention : "&Calculs!$CD$27&" ligne(s) de l\'onglet '
+    f'Charge ont à la fois un dessinateur (K) et une ressource externe (L) : une seule ressource par ligne.",""))',
+    font(9, True, "B45309"))
 NOTES = [
-    "Affaire = une ligne de l'onglet Charge dont le nom de projet (colonne B) est renseigné.  "
-    "Projet en cours = affaire dont le taux d'avancement (colonne O) est inférieur à 100 %.",
+    "Affaire = un sous-projet (projet + sous-projet + produit) : les lignes de ses ressources (une ligne par "
+    "dessinateur ou ressource externe) sont additionnées.  En cours = ligne dont l'avancement (O) est < 100 %.",
     "Charge par mois : la charge estimée (M) est répartie au prorata des jours calendaires entre la date de "
     "début planifiée (N) et la date de besoin (F). Sans date de besoin, ou si elle précède le début, "
     "toute la charge est placée sur le mois de début.",
@@ -1210,16 +1308,16 @@ ws.column_dimensions[L(gc(NG))].width = 2
 D_ROW_H = {1: 6, 2: 30, 3: 18, 4: 8, 5: 22, 6: 14, 7: 10, 8: 20, 9: 6,
            10: 6, 11: 18, 12: 34, 13: 15, 14: 15, 15: 8, 16: 14, 17: 20, 18: 6,
            19: 6, 20: 18, 21: 16, 38: 6, 39: 18, 46: 8, 47: 14, 48: 20, 49: 6, 50: 30,
-           66: 14, 67: 14, 68: 20, 69: 6, 70: 6, 71: 15, 72: 18, 87: 8, 88: 14}
+           66: 14, 67: 14, 68: 20, 69: 6, 70: 6, 71: 15, 72: 18, 91: 8, 92: 14}
 for r in range(22, 38):
     D_ROW_H[r] = 15
 for r in range(40, 46):
     D_ROW_H[r] = 16
 for r in range(51, 66):
     D_ROW_H[r] = 16.5
-for r in range(73, 87):
+for r in range(73, 91):
     D_ROW_H[r] = 16
-D_LAST = 92
+D_LAST = 97
 for r, h in D_ROW_H.items():
     ws.row_dimensions[r].height = h
 for r in range(1, D_LAST + 1):
@@ -1229,14 +1327,15 @@ for r in range(1, D_LAST + 1):
 for r in (2, 3):
     for i in range(NG):
         ws.cell(r, gc(i)).fill = fill(NAVY)
-put(2, 1, 40, "CHARGE PAR DESSINATEUR PROJETEUR", font(17, True, WHITE), bg=NAVY)
-put(3, 1, 44, "Charge fixe hors projet + heures des affaires, comparées à la capacité mensuelle de la personne.",
+put(2, 1, 40, "CHARGE PAR RESSOURCE (DESSINATEURS ET EXTERNES)", font(17, True, WHITE), bg=NAVY)
+put(3, 1, 44, "Charge fixe hors projet + heures de ses lignes dans l'onglet Charge, comparées à la capacité "
+              "mensuelle de la personne.",
     font(9, color="C9D3E3"), bg=NAVY)
 put(2, 44, 57, "=TODAY()", font(10, color="C9D3E3"), h="right", fmt='"Édité le "DD/MM/YYYY', bg=NAVY)
 
 # barre : choix du dessinateur + rappel de ses réglages
 box(5, 6, 0, NG - 1)
-put(5, 0, 4, "Dessinateur", font(9, True, GREY), h="right", indent=1)
+put(5, 0, 4, "Ressource", font(9, True, GREY), h="right", indent=1)
 for i in range(5, 17):
     cell = ws.cell(5, gc(i))
     cell.fill = fill(INPUT_FILL)
@@ -1244,12 +1343,14 @@ for i in range(5, 17):
                          left=inp_border if i == 5 else None, right=inp_border if i == 16 else None)
 put(5, 5, 16, LISTS[4][3][0], font(11, True, INPUT_INK), h="center", bg=INPUT_FILL)
 wb.defined_names["p_Dessinateur"] = DefinedName("p_Dessinateur", attr_text=f"Dessinateurs!${gl(5)}$5")
-dv = DataValidation(type="list", formula1="lst_Dessinateurs", allow_blank=True, showErrorMessage=True,
-                    errorTitle="Dessinateur inconnu", error="Choisir un nom de la liste (onglet Data, colonne E).")
+dv = DataValidation(type="list", formula1="lst_Ressources", allow_blank=True, showErrorMessage=True,
+                    errorTitle="Ressource inconnue",
+                    error="Choisir un nom de la liste (onglet Data : dessinateurs colonne E, externes colonne H).")
 dv.add(f"{gl(5)}5")
 ws.add_data_validation(dv)
-put(6, 5, 16, f'=IF(AND({DS["nom"]}<>"",{DS["pos"]}=0),"Absent de la liste Data : réglages par défaut",'
-             f'"Liste de l\'onglet Data (colonne E)")', font(7, color=MUTED, italic=True), h="center", v="top",
+put(6, 5, 16, f'=IF({DS["type"]}="Hors liste","Absent des listes Data : réglages par défaut",'
+             f'IF({DS["type"]}="Externe","Ressource externe (Data, colonne H)",'
+             f'"Dessinateur interne (Data, colonne E)"))', font(7, color=MUTED, italic=True), h="center", v="top",
     shrink=True)
 ws.conditional_formatting.add(f"{gl(5)}6", FormulaRule(formula=[f'LEFT(${gl(5)}$6,7)="Absent "'],
                                                        font=Font(color=RED_T, bold=True, italic=False)))
@@ -1261,13 +1362,15 @@ put(5, 27, 31, "Charge fixe", info_lab, h="right", indent=1)
 put(5, 32, 34, f"={DS['fixe']}", info_val, fmt='#,##0" h"')
 put(5, 36, 42, "Dispo. projets", info_lab, h="right", indent=1)
 put(5, 43, 46, f"={DS['capProj']}", info_val, fmt='#,##0" h/mois"')
-put(6, 18, 46, "par mois · valeurs propres au dessinateur (Data, colonnes F-G) ou valeurs par défaut du Dashboard",
+put(6, 18, 46, "par mois · valeurs propres à la personne (Data, colonnes F-G ou I-J) ou valeurs par défaut du "
+              "Dashboard",
     font(7, color=MUTED, italic=True), h="center", v="top", shrink=True)
 put(5, 48, 57, f"={DS['debut']}", font(9, True, GREY), h="right", fmt='"12 mois dès "MMMM YYYY')
 put(6, 48, 57, f'="Périmètre : "&{DS["perim"]}', font(7, color=MUTED, italic=True), h="right", v="top")
 
 # ---- synthèse
-section(8, f'=IF({DS["nom"]}="","SYNTHÈSE — choisir un dessinateur","SYNTHÈSE — "&UPPER({DS["nom"]}))')
+section(8, f'=IF({DS["nom"]}="","SYNTHÈSE — choisir une ressource","SYNTHÈSE — "&UPPER({DS["nom"]})'
+            f'&IF({DS["type"]}="Externe","  (RESSOURCE EXTERNE)",""))')
 D_KPIS = [
     ("CAPACITÉ MENSUELLE", f"={DS['cap']}", H_FMT,
      (f"={DS['fixe']}", '"dont "#,##0" h de charge fixe"'),
@@ -1452,31 +1555,34 @@ put(66, 0, NG - 1, f'=IF({DS["nbAff"]}>{N_DESS_AFF},"Seules les {N_DESS_AFF} plu
 
 # ---- occupation de l'équipe
 section(68, "OCCUPATION DE L'ÉQUIPE (charge fixe + projets, en % de la capacité)")
-box(70, 87, 0, NG - 1)
+box(70, 91, 0, NG - 1)
 put(71, 1, 57, "Vert : moins de 90 %   ·   Orange : de 90 à 100 %   ·   Rouge : au-delà de 100 % (surcharge)   ·   "
-               "les 12 premiers dessinateurs de la liste Data", font(8, color=GREY, italic=True))
+               f"les {N_DESS} premières ressources des listes Data (dessinateurs puis externes)",
+    font(8, color=GREY, italic=True))
 for i in range(1, NG - 1):
     ws.cell(72, gc(i)).border = Border(bottom=side("B8C2CF"))
-put(72, 1, 9, "Dessinateur", font(8, True, MUTED))
+put(72, 1, 7, "Ressource", font(8, True, MUTED))
 for m in range(N_MONTHS):
     c1 = 10 + 4 * m
     put(72, c1, c1 + 3, f"=Calculs!{TEAM_H[m]}3", font(8, True, GREY), h="center", fmt="mmm yy")
 for k in range(N_DESS):
     r = 73 + k
     cr = TEAM_R1 + k
-    put(r, 1, 9, f"=Calculs!{TEAM_NAME}{cr}", font(9, False, INK))
+    put(r, 1, 7, f"=Calculs!{TEAM_NAME}{cr}", font(9, False, INK), shrink=True)
+    put(r, 8, 9, f'=IF(Calculs!{TEAM_NAME}{cr}="","",IF(Calculs!FB{cr}="Externe","ext.",""))',
+        font(7.5, False, MUTED, italic=True), h="center")
     for m in range(N_MONTHS):
         c1 = 10 + 4 * m
         put(r, c1, c1 + 3, f"=Calculs!{TEAM_O[m]}{cr}", font(9, True, INK), h="center", fmt="0%")
 team_rng = f"{gl(10)}73:{gl(10 + 4 * N_MONTHS - 1)}{72 + N_DESS}"
 occ_cf(team_rng, f"{gl(10)}73")
-ws.conditional_formatting.add(f"{gl(1)}73:{gl(9)}{72 + N_DESS}",
+ws.conditional_formatting.add(f"{gl(1)}73:{gl(7)}{72 + N_DESS}",
                               FormulaRule(formula=[f'AND(${gl(1)}73<>"",${gl(1)}73={SEL})'],
                                           font=Font(bold=True, color=ACCENT),
                                           fill=PatternFill("solid", start_color="EAF2FD", end_color="EAF2FD",
                                                            bgColor="EAF2FD")))
 for j, (cr, label) in enumerate(((NA_ROW, "Charge non affectée (h)"),
-                                 (OTHER_ROW, "Autres dessinateurs (h)"))):
+                                 (OTHER_ROW, "Autres ressources (h)"))):
     r = 73 + N_DESS + j
     put(r, 1, 9, label, font(8.5, False, GREY, italic=True))
     for m in range(N_MONTHS):
@@ -1487,16 +1593,19 @@ for j, (cr, label) in enumerate(((NA_ROW, "Charge non affectée (h)"),
             ws.cell(r, gc(i)).border = Border(top=side("D6DCE4"))
 
 D_NOTES = [
-    "Charge d'un dessinateur = charge fixe hors projet + heures des affaires où il figure en colonne K de l'onglet "
-    "Charge, réparties par mois comme sur le Dashboard (même périmètre, même répartition, mêmes 12 mois).",
-    "Toute la charge d'une affaire est comptée pour son dessinateur, même si un prestataire est indiqué en colonne L.  "
-    "Capacité et charge fixe : colonnes F et G de l'onglet Data, sinon valeurs par défaut du Dashboard.",
-    f'=IF({DS["nbListe"]}>{N_DESS},"Attention : la liste Data contient "&'
-    f'{DS["nbListe"]}&" dessinateurs, seuls les {N_DESS} premiers apparaissent dans le '
-    f'tableau d\'occupation (le choix du dessinateur en haut de page fonctionne pour tous).","")',
+    "Charge d'une ressource = charge fixe hors projet + heures des lignes de l'onglet Charge où elle figure (colonne K "
+    "pour un dessinateur, L pour une ressource externe), réparties par mois comme sur le Dashboard.",
+    "Une ligne = une ressource : plusieurs personnes sur un même sous-projet = plusieurs lignes, chacune avec ses "
+    "heures.  Capacité et charge fixe : Data (F-G ou I-J), sinon valeurs par défaut du Dashboard.",
+    f'=IF({DS["nbDouble"]}>0,"Attention : "&{DS["nbDouble"]}&" ligne(s) de l\'onglet Charge ont à la fois un '
+    f'dessinateur (K) et une ressource externe (L) : seule la colonne K est comptée. Faire une ligne par ressource.",'
+    f'"")',
+    f'=IF({DS["nbListe"]}+{DS["nbExt"]}>{N_DESS},"Attention : les listes Data contiennent "&'
+    f'({DS["nbListe"]}+{DS["nbExt"]})&" ressources, seules les {N_DESS} premières apparaissent dans le tableau '
+    f'd\'occupation (le choix en haut de page fonctionne pour toutes).","")',
 ]
 for i, t in enumerate(D_NOTES):
-    put(89 + i, 0, NG - 1, t, font(8, color=GREY if i < 2 else "B45309", italic=i < 2, bold=i == 2))
+    put(93 + i, 0, NG - 1, t, font(8, color=GREY if i < 2 else "B45309", italic=i < 2, bold=i >= 2))
 
 ws.print_area = f"A1:{L(gc(NG))}{D_LAST}"
 ws.page_setup.orientation = "landscape"
