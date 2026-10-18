@@ -17,7 +17,6 @@ from openpyxl.chart.layout import Layout, ManualLayout
 from openpyxl.chart.marker import DataPoint
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.text import RichText
-from openpyxl.comments import Comment
 from openpyxl.drawing.line import LineProperties
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from openpyxl.drawing.text import CharacterProperties, Font as DFont, Paragraph, ParagraphProperties
@@ -71,6 +70,22 @@ def side(color=LINE, style="thin"):
     return Side(style=style, color=color)
 
 
+def lit(text):
+    """Texte en constante de formule, découpé en morceaux de 250 caractères (Excel limite chaque constante à 255)."""
+    parts = [text[i:i + 250] for i in range(0, len(text), 250)] or [""]
+    return "&".join('"' + p.replace('"', '""') + '"' for p in parts)
+
+
+def help_formula(toggle, content):
+    """Aide affichée seulement si la case « Afficher l'aide » de l'onglet (nom défini `toggle`) vaut Oui.
+    `content` : texte simple, ou formule commençant par « = »."""
+    expr = content[1:] if content.startswith("=") else lit(content)
+    return f'=IF({toggle}="Oui",{expr},"")'
+
+
+HELP_CHOICES = '"Oui,Non"'
+
+
 def rng(col, r1=FIRST, r2=LAST, sheet=None):
     ref = f"${col}${r1}:${col}${r2}"
     return f"{sheet}!{ref}" if sheet else ref
@@ -111,12 +126,13 @@ DATA_LAST = 203
 
 ws_data["A1"] = "LISTES DE RÉFÉRENCE"
 ws_data["A1"].font = font(14, True, NAVY)
-ws_data["A2"] = ("Saisir une valeur par cellule, sans ligne vide, sous chaque en-tête : les listes déroulantes "
+ws_data["A2"] = help_formula("aide_Data", "Saisir une valeur par cellule, sans ligne vide, sous chaque en-tête : les listes déroulantes "
                  "de l'onglet Charge se mettent à jour automatiquement (200 valeurs max par liste). "
                  "Colonnes F-G et I-J : capacité et charge fixe propres à un dessinateur ou à une ressource "
                  "externe (vide = valeurs par défaut réglées en haut du Dashboard). Colonne K (facultative) : jours "
-                 "non travaillés communs à tout le bureau (fériés, fermeture), retirés du lissage comme les week-ends. "
-                 "Les valeurs ci-dessous sont des exemples à remplacer.")
+                 "non travaillés communs à tout le bureau (fériés, fermeture), retirés du lissage comme les week-ends ; "
+                 "les congés individuels ne se saisissent pas.  Les valeurs ci-dessous sont des exemples à remplacer "
+                 "(ex. Léa Chevalier à 96 h = temps partiel 80 %).")
 ws_data["A2"].font = font(9, color=GREY, italic=True)
 ws_data["A2"].alignment = Alignment(wrap_text=True, vertical="top")
 ws_data.merge_cells("A2:K2")
@@ -146,8 +162,6 @@ for col, title, values in DESS_COLS:
                               + (" La capacité doit être d'au moins 1 h." if is_cap else ""))
     dv.add(f"{col}4:{col}{DATA_LAST}")
     ws_data.add_data_validation(dv)
-ws_data["F7"].comment = Comment("Exemple : temps partiel 80 % → 96 h/mois au lieu de la capacité par défaut.",
-                                "Plan de charge")
 for col, title, name, values in LISTS:
     ws_data.column_dimensions[col].width = 30
     h = ws_data[f"{col}3"]
@@ -177,14 +191,37 @@ for r in range(4, DATA_LAST + 1):
     c.alignment = Alignment(horizontal="center")
     c.border = Border(bottom=side("E5E7EB"), left=side("E5E7EB"), right=side("E5E7EB"))
 dv = DataValidation(type="date", operator="greaterThan", formula1="36526", allow_blank=True, showErrorMessage=True,
-                    errorTitle="Date attendue", error="Saisir uniquement des dates (jj/mm/aaaa), une par cellule.",
-                    showInputMessage=True, promptTitle="Jours non travaillés",
-                    prompt="Facultatif : jours fériés ou de fermeture communs à tout le bureau. Ils sont retirés "
-                           "du lissage, comme les samedis et dimanches. Les congés individuels ne se saisissent pas ici.")
+                    errorTitle="Date attendue", error="Saisir uniquement des dates (jj/mm/aaaa), une par cellule.")
 dv.add(f"K4:K{DATA_LAST}")
 ws_data.add_data_validation(dv)
 ws_data.freeze_panes = "A4"
 ws_data.sheet_properties.tabColor = "6B7280"
+ws_data.print_area = f"A2:K{DATA_LAST}"
+
+
+def help_switch(sheet, label_cell, input_cell, name):
+    """Case « Afficher l'aide » (Oui / Non), placée hors de la zone d'impression."""
+    if label_cell:
+        lab = sheet[label_cell]
+        lab.value = "Afficher l'aide"
+        lab.font = font(9, True, GREY)
+        lab.alignment = Alignment(horizontal="right", vertical="center", indent=1)
+    cell = sheet[input_cell]
+    cell.value = "Oui"
+    cell.font = font(10, True, INPUT_INK)
+    cell.fill = fill(INPUT_FILL)
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+    b = side("8FB3E6")
+    cell.border = Border(top=b, bottom=b, left=b, right=b)
+    v = DataValidation(type="list", formula1=HELP_CHOICES, allow_blank=False, showErrorMessage=True,
+                       errorTitle="Oui ou Non", error="Choisir Oui (aide affichée) ou Non (tableau épuré).")
+    v.add(input_cell)
+    sheet.add_data_validation(v)
+    col, row = re.match(r"([A-Z]+)(\d+)", input_cell).groups()
+    wb.defined_names[name] = DefinedName(name, attr_text=f"{sheet.title}!${col}${row}")
+
+
+help_switch(ws_data, "B1", "C1", "aide_Data")
 
 # ---------------------------------------------------------------- Charge
 CHARGE_COLS = [
@@ -273,7 +310,7 @@ assert all(len(row) == 15 for row in SAMPLE)
 ws = ws_charge
 ws["A1"] = "PLAN DE CHARGE — BUREAU D'ÉTUDES"
 ws["A1"].font = font(14, True, NAVY)
-ws["A2"] = ("UNE LIGNE = UNE RESSOURCE sur un sous-projet : un dessinateur (K) OU une ressource externe (L), avec SES "
+ws["A2"] = help_formula("aide_Charge", "UNE LIGNE = UNE RESSOURCE sur un sous-projet : un dessinateur (K) OU une ressource externe (L), avec SES "
             "heures en M.  Pour mettre plusieurs personnes sur un sous-projet, recopier la ligne (colonnes A à J à "
             "l'identique) et changer la ressource et les heures.  Couleurs : rouge = dessinateur ET externe sur la "
             "même ligne (à corriger, seul K est compté) ; orange = aucune ressource (charge à affecter).  "
@@ -282,8 +319,16 @@ ws["A2"] = ("UNE LIGNE = UNE RESSOURCE sur un sous-projet : un dessinateur (K) O
 ws["A2"].font = font(9, color=GREY, italic=True)
 ws["A2"].alignment = Alignment(wrap_text=True, vertical="top")
 ws.merge_cells("A2:I2")
-ws.row_dimensions[2].height = 38
+ws.row_dimensions[2].height = 28
 ws.row_dimensions[1].height = 24
+help_switch(ws, "D1", "E1", "aide_Charge")
+ws.print_area = f"A2:O{LAST}"
+ws.print_title_rows = "3:3"
+ws.page_setup.orientation = "landscape"
+ws.page_setup.paperSize = ws.PAPERSIZE_A3
+ws.page_setup.fitToWidth = 1
+ws.page_setup.fitToHeight = 0
+ws.sheet_properties.pageSetUpPr.fitToPage = True
 ws.row_dimensions[3].height = 48
 thin = side("D9DEE5")
 for col, title, width, _, fmt in CHARGE_COLS:
@@ -314,18 +359,11 @@ ws.freeze_panes = "C4"
 ws.auto_filter.ref = f"A3:O{LAST}"
 ws.sheet_view.zoomScale = 90
 
-PROMPTS = {
-    "K": ("Dessinateur interne", "Une seule ressource par ligne : remplir K OU L, pas les deux. Pour une 2e personne, "
-                                 "recopier la ligne et changer la ressource et les heures."),
-    "L": ("Ressource externe", "À remplir seulement si la ligne n'a pas de dessinateur interne (K vide)."),
-}
 for col, _, _, lst, _ in CHARGE_COLS:
     if lst:
         dv = DataValidation(type="list", formula1=lst, allow_blank=True, errorStyle="warning",
                             showErrorMessage=True, errorTitle="Valeur hors liste",
-                            error="Cette valeur n'est pas dans la liste de l'onglet Data. Continuer quand même ?",
-                            showInputMessage=col in PROMPTS, promptTitle=PROMPTS.get(col, ("", ""))[0] or None,
-                            prompt=PROMPTS.get(col, ("", ""))[1] or None)
+                            error="Cette valeur n'est pas dans la liste de l'onglet Data. Continuer quand même ?")
         dv.add(f"{col}{FIRST}:{col}{LAST}")
         ws.add_data_validation(dv)
 for col in "FN":
@@ -335,9 +373,7 @@ for col in "FN":
     ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="greaterThanOrEqual", formula1="0", allow_blank=True,
                     showErrorMessage=True, errorTitle="Nombre d'heures",
-                    error="Saisir un nombre d'heures positif.", showInputMessage=True,
-                    promptTitle="Heures de cette ressource",
-                    prompt="Heures de la personne de cette ligne seulement (pas le total du sous-projet).")
+                    error="Saisir un nombre d'heures positif (heures de la personne de cette ligne).")
 dv.add(f"M{FIRST}:M{LAST}")
 ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="between", formula1="0", formula2="1", allow_blank=True,
@@ -871,7 +907,7 @@ for i in range(NG):
     ws.column_dimensions[gl(i)].width = 2.71
 ws.column_dimensions[L(gc(NG))].width = 2
 
-ROW_H = {1: 6, 2: 30, 3: 18, 4: 8, 5: 22, 6: 14, 7: 10, 8: 20, 9: 6,
+ROW_H = {1: 22, 2: 30, 3: 18, 4: 8, 5: 22, 6: 14, 7: 10, 8: 20, 9: 6,
          10: 6, 11: 18, 12: 34, 13: 15, 14: 6, 23: 8, 24: 14, 25: 20, 26: 6,
          27: 6, 28: 18, 29: 34, 30: 15, 31: 15, 32: 8, 33: 14, 34: 20, 35: 6,
          36: 6, 37: 18, 38: 15, 55: 8, 56: 14, 57: 20, 58: 6, 59: 30}
@@ -953,8 +989,8 @@ hints = {"p_Perimetre": ("En cours = avancement < 100 %", None),
                            f'"Prorata des jours ouvrés entre début planifié et date de besoin")', None),
          "p_PremierMois": ('=IF(ISNUMBER(p_PremierMois),"Saisi manuellement",Calculs!$AL$13)',
                            '"Vide = auto ("MMM YYYY")"'),
-         "p_HeuresETP": ("par personne", None),
-         "p_ChargeFixe": ("hors projet", None)}
+         "p_HeuresETP": ("par personne · propre : Data F / I", None),
+         "p_ChargeFixe": ("hors projet · propre : Data G / J", None)}
 inp_border = side("8FB3E6")
 for name, (c1, c2) in PARAMS.items():
     lc1, lc2, text = labels[name]
@@ -967,8 +1003,8 @@ for name, (c1, c2) in PARAMS.items():
     cell = put(P_ROW, c1, c2, defaults[name], font(10, True, INPUT_INK), h="center", bg=INPUT_FILL,
                fmt={"p_PremierMois": "MMMM YYYY", "p_HeuresETP": '#,##0" h"',
                     "p_ChargeFixe": '#,##0" h"'}.get(name))
-    put(6, c1, c2, hints[name][0], font(7, color=MUTED, italic=True), h="center", v="top", fmt=hints[name][1],
-        shrink=True)
+    put(6, c1, c2, help_formula("aide_Dashboard", hints[name][0]), font(7, color=MUTED, italic=True), h="center",
+        v="top", fmt=hints[name][1], shrink=True)
 
 dv = DataValidation(type="list", formula1=f'"{PERIM_RUN},{PERIM_ALL}"', allow_blank=False)
 dv.add(f"{gl(PARAMS['p_Perimetre'][0])}{P_ROW}")
@@ -977,23 +1013,15 @@ dv = DataValidation(type="list", formula1=f'"{REP_SMOOTH},{REP_START}"', allow_b
 dv.add(f"{gl(PARAMS['p_Repartition'][0])}{P_ROW}")
 ws.add_data_validation(dv)
 dv = DataValidation(type="date", operator="greaterThan", formula1="36526", allow_blank=True,
-                    showErrorMessage=True, error="Saisir une date (le 1er du mois par exemple) ou laisser vide.",
-                    showInputMessage=True, promptTitle="1er mois affiché",
-                    prompt="Laisser vide pour démarrer au premier mois de début planifié.")
+                    showErrorMessage=True, error="Saisir une date (le 1er du mois par exemple) ou laisser vide.")
 dv.add(f"{gl(PARAMS['p_PremierMois'][0])}{P_ROW}")
 ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="between", formula1="1", formula2="744", allow_blank=False,
-                    showErrorMessage=True, error="Saisir la capacité mensuelle d'une personne en heures (ex. 120).",
-                    showInputMessage=True, promptTitle="Capacité par défaut",
-                    prompt="Heures disponibles par mois pour une personne (dessinateur ou externe). Valeur "
-                           "propre à une personne : onglet Data, colonne F (dessinateur) ou I (externe).")
+                    showErrorMessage=True, error="Saisir la capacité mensuelle d'une personne en heures (ex. 120).")
 dv.add(f"{gl(PARAMS['p_HeuresETP'][0])}{P_ROW}")
 ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="between", formula1="0", formula2="744", allow_blank=False,
-                    showErrorMessage=True, error="Saisir un nombre d'heures par mois (ex. 20).",
-                    showInputMessage=True, promptTitle="Charge fixe hors projet",
-                    prompt="Heures prises chaque mois hors affaires (petites modifications de plans...). Valeur "
-                           "propre : onglet Data, colonne G (dessinateur) ou J (externe).")
+                    showErrorMessage=True, error="Saisir un nombre d'heures par mois (ex. 20).")
 dv.add(f"{gl(PARAMS['p_ChargeFixe'][0])}{P_ROW}")
 ws.add_data_validation(dv)
 
@@ -1134,7 +1162,8 @@ put(38, LP[0] + 1, LP[0] + 14, f"={K['start']}", sub_f, fmt='"12 mois à partir 
 put(38, LP[0] + 15, LP[1] - 1, f"={K['hors']}", sub_f, h="right",
     fmt='"Hors période ou sans date de début : "#,##0" h";;"Toute la charge est visible sur la période"')
 put(37, RP[0] + 1, RP[1] - 1, "RÉPARTITION DE LA CHARGE PAR PROJET", title_f)
-put(38, RP[0] + 1, RP[1] - 1, "Total au centre · une couleur par projet, commune aux deux graphiques", sub_f)
+put(38, RP[0] + 1, RP[1] - 1, help_formula("aide_Dashboard", "Total au centre · une couleur par projet, commune "
+                                                               "aux deux graphiques"), sub_f)
 
 CH_R1, CH_R2 = 39, 54
 DN = (33, 45)       # colonnes de grille du donut
@@ -1344,9 +1373,13 @@ NOTES = [
     "valeurs par défaut (120 h − 20 h, réglables en haut de page).  Charge par ressource : onglet Dessinateurs.",
 ]
 for i, t in enumerate(NOTES):
-    put(NOTE_R + 1 + i, 0, NG - 1, t, font(8, color=GREY, italic=True))
+    put(NOTE_R + 1 + i, 0, NG - 1, help_formula("aide_Dashboard", t), font(8, color=GREY, italic=True))
 
-ws.print_area = f"A1:{L(gc(NG))}{LAST_ROW}"
+# case « Afficher l'aide » en ligne 1, au-dessus du bandeau : hors de la zone imprimée
+put(1, 47, 53, "Afficher l'aide", font(9, True, GREY), h="right", indent=1)
+help_switch(ws, None, f"{gl(54)}1", "aide_Dashboard")
+ws.merge_cells(start_row=1, start_column=gc(54), end_row=1, end_column=gc(58))
+ws.print_area = f"A2:{L(gc(NG))}{LAST_ROW}"
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90
@@ -1365,7 +1398,7 @@ for i in range(NG):
     ws.column_dimensions[gl(i)].width = 2.71
 ws.column_dimensions[L(gc(NG))].width = 2
 
-D_ROW_H = {1: 6, 2: 30, 3: 18, 4: 8, 5: 22, 6: 14, 7: 10, 8: 20, 9: 6,
+D_ROW_H = {1: 22, 2: 30, 3: 18, 4: 8, 5: 22, 6: 14, 7: 10, 8: 20, 9: 6,
            10: 6, 11: 18, 12: 34, 13: 15, 14: 15, 15: 8, 16: 14, 17: 20, 18: 6,
            19: 6, 20: 18, 21: 16, 38: 6, 39: 18, 46: 8, 47: 14, 48: 20, 49: 6, 50: 30,
            66: 14, 67: 14, 68: 20, 69: 6, 70: 6, 71: 15, 72: 18, 91: 8, 92: 14}
@@ -1409,8 +1442,8 @@ dv = DataValidation(type="list", formula1="lst_Ressources", allow_blank=True, sh
 dv.add(f"{gl(5)}5")
 ws.add_data_validation(dv)
 put(6, 5, 16, f'=IF({DS["type"]}="Hors liste","Absent des listes Data : réglages par défaut",'
-             f'IF({DS["type"]}="Externe","Ressource externe (Data, colonne H)",'
-             f'"Dessinateur interne (Data, colonne E)"))', font(7, color=MUTED, italic=True), h="center", v="top",
+             f'IF(aide_Dessinateurs<>"Oui","",IF({DS["type"]}="Externe","Ressource externe (Data, colonne H)",'
+             f'"Dessinateur interne (Data, colonne E)")))', font(7, color=MUTED, italic=True), h="center", v="top",
     shrink=True)
 ws.conditional_formatting.add(f"{gl(5)}6", FormulaRule(formula=[f'LEFT(${gl(5)}$6,7)="Absent "'],
                                                        font=Font(color=RED_T, bold=True, italic=False)))
@@ -1422,8 +1455,8 @@ put(5, 27, 31, "Charge fixe", info_lab, h="right", indent=1)
 put(5, 32, 34, f"={DS['fixe']}", info_val, fmt='#,##0" h"')
 put(5, 36, 42, "Dispo. projets", info_lab, h="right", indent=1)
 put(5, 43, 46, f"={DS['capProj']}", info_val, fmt='#,##0" h/mois"')
-put(6, 18, 46, "par mois · valeurs propres à la personne (Data, colonnes F-G ou I-J) ou valeurs par défaut du "
-              "Dashboard",
+put(6, 18, 46, help_formula("aide_Dessinateurs", "par mois · valeurs propres à la personne (Data, colonnes F-G ou "
+                                                  "I-J) ou valeurs par défaut du Dashboard"),
     font(7, color=MUTED, italic=True), h="center", v="top", shrink=True)
 put(5, 48, 57, f"={DS['debut']}", font(9, True, GREY), h="right", fmt='"12 mois dès "MMMM YYYY')
 put(6, 48, 57, f'="Périmètre : "&{DS["perim"]}', font(7, color=MUTED, italic=True), h="right", v="top")
@@ -1666,15 +1699,29 @@ D_NOTES = [
     f'd\'occupation (le choix en haut de page fonctionne pour toutes).","")',
 ]
 for i, t in enumerate(D_NOTES):
-    put(93 + i, 0, NG - 1, t, font(8, color=GREY if i < 2 else "B45309", italic=i < 2, bold=i >= 2))
+    put(93 + i, 0, NG - 1, help_formula("aide_Dessinateurs", t) if i < 2 else t,
+        font(8, color=GREY if i < 2 else "B45309", italic=i < 2, bold=i >= 2))
 
-ws.print_area = f"A1:{L(gc(NG))}{D_LAST}"
+# case « Afficher l'aide » en ligne 1, au-dessus du bandeau : hors de la zone imprimée
+put(1, 47, 53, "Afficher l'aide", font(9, True, GREY), h="right", indent=1)
+help_switch(ws, None, f"{gl(54)}1", "aide_Dessinateurs")
+ws.merge_cells(start_row=1, start_column=gc(54), end_row=1, end_column=gc(58))
+ws.print_area = f"A2:{L(gc(NG))}{D_LAST}"
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90
 ws.row_breaks.append(Break(id=47))
 ws.page_margins.left = ws.page_margins.right = 0.3
 ws.page_margins.top = ws.page_margins.bottom = 0.4
+
+# contrôles : aucune constante texte de plus de 255 caractères dans une formule (limite Excel), aucune infobulle
+for _ws in wb.worksheets:
+    for _row in _ws.iter_rows():
+        for _c in _row:
+            if isinstance(_c.value, str) and _c.value.startswith("="):
+                for _lit in re.findall(r'"((?:[^"]|"")*)"', _c.value):
+                    assert len(_lit) <= 255, (_ws.title, _c.coordinate, len(_lit))
+assert not any(_dv.showInputMessage for _ws in wb.worksheets for _dv in _ws.data_validations.dataValidation)
 
 wb.active = wb.sheetnames.index("Dashboard")
 for sheet in wb.worksheets:
