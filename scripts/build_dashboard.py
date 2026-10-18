@@ -84,6 +84,13 @@ def help_formula(toggle, content):
 
 
 HELP_CHOICES = '"Oui,Non"'
+MOIS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre",
+        "décembre")
+
+
+def mois_fr(ref):
+    """Nom du mois en français (TEXTE dépend de la langue d'Excel)."""
+    return f'CHOOSE(MONTH({ref}),' + ",".join(f'"{m}"' for m in MOIS) + ")"
 
 
 def rng(col, r1=FIRST, r2=LAST, sheet=None):
@@ -404,6 +411,12 @@ ws.conditional_formatting.add(f"K{FIRST}:L{LAST}",
 # ---------------------------------------------------------------- Dashboard : paramètres (nommés)
 GRID0 = 2          # colonne Excel de la 1re colonne de la grille (B)
 NG = 59            # nombre de colonnes de la grille
+MARGIN_W = 2       # largeur des colonnes de marge A et BI (unité Excel) = 14 pixels
+MARGIN_H = 10.5    # hauteur des lignes de marge (points) = 14 pixels : mêmes marges en haut, en bas et sur les côtés
+LOGO = (51, 57)    # emplacement du logo de l'entreprise : cases fusionnées BA2:BG2
+# hors zone d'impression, à droite de la colonne BI : boutons des macros (placés par make_xlsm.py en BL2:BM4 et
+# BL6:BM7) et case « Afficher l'aide » (Oui / Non) qui reste utilisable si les macros sont désactivées
+BTN_AIDE_LABEL, BTN_AIDE_CELL = "BL8", "BM8"
 
 
 def gc(i):
@@ -414,7 +427,7 @@ def gl(i):
     return L(gc(i))
 
 
-P_ROW = 5
+P_ROW = 6
 PARAMS = {  # nom: (col début input, col fin input)
     "p_Perimetre": (4, 10),
     "p_Repartition": (16, 28),
@@ -536,6 +549,8 @@ INDICATORS = [
     ("nbTermines", "Lignes terminées (avancement 100 %)", f"=COUNTIFS(B{R1}:B{R2},1,C{R1}:C{R2},\">=1\")", "0"),
     ("finPeriode", "Dernier mois affiché", f"=EDATE(AL14,{N_MONTHS - 1})", "MMM YYYY"),
     ("picPart", "Part du mois de pic dans la charge de la période", "=IF(AL15=0,0,AL17/AL15)", "0%"),
+    ("periodeTxt", "Période affichée (bandeau des onglets Dashboard et Dessinateurs)",
+     f'="Période : "&{mois_fr("AL14")}&" "&YEAR(AL14)&" – "&{mois_fr("AL25")}&" "&YEAR(AL25)', "General"),
 ]
 ws["AK3"], ws["AL3"] = "Indicateur", "Valeur"
 for c in ("AK3", "AL3"):
@@ -902,12 +917,13 @@ ws.freeze_panes = "B4"
 ws = ws_dash
 ws.sheet_view.showGridLines = False
 ws.sheet_view.zoomScale = 90
-ws.column_dimensions["A"].width = 2
+ws.column_dimensions["A"].width = MARGIN_W
 for i in range(NG):
     ws.column_dimensions[gl(i)].width = 2.71
-ws.column_dimensions[L(gc(NG))].width = 2
+ws.column_dimensions[L(gc(NG))].width = MARGIN_W
 
-ROW_H = {1: 22, 2: 30, 3: 18, 4: 8, 5: 22, 6: 14, 7: 10, 8: 20, 9: 6,
+# ligne 1 = marge haute, de même taille que les colonnes de marge A et BI
+ROW_H = {1: MARGIN_H, 2: 30, 3: 16, 4: 16, 5: 8, 6: 22, 7: 14, 8: 24, 9: 6,
          10: 6, 11: 18, 12: 34, 13: 15, 14: 6, 23: 8, 24: 14, 25: 20, 26: 6,
          27: 6, 28: 18, 29: 34, 30: 15, 31: 15, 32: 8, 33: 14, 34: 20, 35: 6,
          36: 6, 37: 18, 38: 15, 55: 8, 56: 14, 57: 20, 58: 6, 59: 30}
@@ -919,7 +935,8 @@ TABLE_R1 = 60
 TABLE_R2 = TABLE_R1 + N_TABLE - 1
 for r in range(TABLE_R1, TABLE_R2 + 1):
     ROW_H[r] = 16.5
-LAST_ROW = TABLE_R2 + 7
+LAST_ROW = TABLE_R2 + 8   # dernière ligne = marge basse
+ROW_H[LAST_ROW] = MARGIN_H
 for r, h in ROW_H.items():
     ws.row_dimensions[r].height = h
 
@@ -968,17 +985,27 @@ def section(r, text):
     c.alignment = Alignment(vertical="bottom")
 
 
+def banner(title, subtitle, edite_name):
+    """Bandeau des lignes 2 à 4 : titre, logo (BA2:BG2), « Édité le » et période affichée.
+    « Édité le » est une date fixe, écrite par la macro « Éditer le PDF » (nom défini `edite_name`)."""
+    for r in (2, 3, 4):
+        for i in range(NG):
+            ws.cell(r, gc(i)).fill = fill(NAVY)
+    put(2, 1, 40, title, font(17, True, WHITE), bg=NAVY)
+    put(2, LOGO[0], LOGO[1], None, bg=NAVY)
+    put(3, 1, 42, subtitle, font(9, color="C9D3E3"), bg=NAVY)
+    put(3, 44, LOGO[1], None, font(10, color="C9D3E3"), h="right", fmt='"Édité le "DD/MM/YYYY', bg=NAVY)
+    wb.defined_names[edite_name] = DefinedName(edite_name, attr_text=f"{ws.title}!${gl(44)}$3")
+    put(4, 30, LOGO[1], f"={K['periodeTxt']}", font(10, True, WHITE), h="right", bg=NAVY)
+
+
 # Bandeau titre
-for r in (2, 3):
-    for i in range(NG):
-        ws.cell(r, gc(i)).fill = fill(NAVY)
-put(2, 1, 40, "TABLEAU DE BORD — PLAN DE CHARGE DU BUREAU D'ÉTUDES", font(17, True, WHITE), bg=NAVY)
-put(3, 1, 44, "Synthèse automatique de l'onglet Charge : mettre à jour Charge et Data, "
-               "le tableau de bord se recalcule seul.", font(9, color="C9D3E3"), bg=NAVY)
-put(2, 44, 57, "=TODAY()", font(10, color="C9D3E3"), h="right", fmt='"Édité le "DD/MM/YYYY', bg=NAVY)
+banner("TABLEAU DE BORD — PLAN DE CHARGE DU BUREAU D'ÉTUDES",
+       "Synthèse automatique de l'onglet Charge : mettre à jour Charge et Data, le tableau de bord se recalcule seul.",
+       "edite_Dashboard")
 
 # Barre de paramètres
-box(5, 6, 0, NG - 1)
+box(P_ROW, P_ROW + 1, 0, NG - 1)
 labels = {"p_Perimetre": (0, 3, "Périmètre"), "p_Repartition": (12, 15, "Répartition"),
           "p_PremierMois": (30, 34, "1er mois affiché"), "p_HeuresETP": (41, 44, "Capacité"),
           "p_ChargeFixe": (50, 53, "Charge fixe")}
@@ -1003,7 +1030,7 @@ for name, (c1, c2) in PARAMS.items():
     cell = put(P_ROW, c1, c2, defaults[name], font(10, True, INPUT_INK), h="center", bg=INPUT_FILL,
                fmt={"p_PremierMois": "MMMM YYYY", "p_HeuresETP": '#,##0" h"',
                     "p_ChargeFixe": '#,##0" h"'}.get(name))
-    put(6, c1, c2, help_formula("aide_Dashboard", hints[name][0]), font(7, color=MUTED, italic=True), h="center",
+    put(P_ROW + 1, c1, c2, help_formula("aide_Dashboard", hints[name][0]), font(7, color=MUTED, italic=True), h="center",
         v="top", fmt=hints[name][1], shrink=True)
 
 dv = DataValidation(type="list", formula1=f'"{PERIM_RUN},{PERIM_ALL}"', allow_blank=False)
@@ -1375,11 +1402,9 @@ NOTES = [
 for i, t in enumerate(NOTES):
     put(NOTE_R + 1 + i, 0, NG - 1, help_formula("aide_Dashboard", t), font(8, color=GREY, italic=True))
 
-# case « Afficher l'aide » en ligne 1, au-dessus du bandeau : hors de la zone imprimée
-put(1, 47, 53, "Afficher l'aide", font(9, True, GREY), h="right", indent=1)
-help_switch(ws, None, f"{gl(54)}1", "aide_Dashboard")
-ws.merge_cells(start_row=1, start_column=gc(54), end_row=1, end_column=gc(58))
-ws.print_area = f"A2:{L(gc(NG))}{LAST_ROW}"
+# case « Afficher l'aide » à droite de la page, hors de la zone imprimée, sous les boutons des macros
+help_switch(ws, BTN_AIDE_LABEL, BTN_AIDE_CELL, "aide_Dashboard")
+ws.print_area = f"A1:{L(gc(NG))}{LAST_ROW}"
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90
@@ -1393,12 +1418,12 @@ ws = ws_dess
 ws.sheet_view.showGridLines = False
 ws.sheet_view.zoomScale = 90
 ws.sheet_properties.tabColor = "1BAF7A"
-ws.column_dimensions["A"].width = 2
+ws.column_dimensions["A"].width = MARGIN_W
 for i in range(NG):
     ws.column_dimensions[gl(i)].width = 2.71
-ws.column_dimensions[L(gc(NG))].width = 2
+ws.column_dimensions[L(gc(NG))].width = MARGIN_W
 
-D_ROW_H = {1: 22, 2: 30, 3: 18, 4: 8, 5: 22, 6: 14, 7: 10, 8: 20, 9: 6,
+D_ROW_H = {1: MARGIN_H, 2: 30, 3: 16, 4: 16, 5: 8, 6: 22, 7: 14, 8: 24, 9: 6,
            10: 6, 11: 18, 12: 34, 13: 15, 14: 15, 15: 8, 16: 14, 17: 20, 18: 6,
            19: 6, 20: 18, 21: 16, 38: 6, 39: 18, 46: 8, 47: 14, 48: 20, 49: 6, 50: 30,
            66: 14, 67: 14, 68: 20, 69: 6, 70: 6, 71: 15, 72: 18, 91: 8, 92: 14}
@@ -1410,56 +1435,53 @@ for r in range(51, 66):
     D_ROW_H[r] = 16.5
 for r in range(73, 91):
     D_ROW_H[r] = 16
-D_LAST = 97
+D_LAST = 97   # dernière ligne = marge basse
+D_ROW_H[D_LAST] = MARGIN_H
 for r, h in D_ROW_H.items():
     ws.row_dimensions[r].height = h
 for r in range(1, D_LAST + 1):
     for c in range(1, gc(NG) + 1):
         ws.cell(r, c).fill = fill(BG)
 
-for r in (2, 3):
-    for i in range(NG):
-        ws.cell(r, gc(i)).fill = fill(NAVY)
-put(2, 1, 40, "CHARGE PAR RESSOURCE (DESSINATEURS ET EXTERNES)", font(17, True, WHITE), bg=NAVY)
-put(3, 1, 44, "Charge fixe hors projet + heures de ses lignes dans l'onglet Charge, comparées à la capacité "
-              "mensuelle de la personne.",
-    font(9, color="C9D3E3"), bg=NAVY)
-put(2, 44, 57, "=TODAY()", font(10, color="C9D3E3"), h="right", fmt='"Édité le "DD/MM/YYYY', bg=NAVY)
+banner("CHARGE PAR RESSOURCE (DESSINATEURS ET EXTERNES)",
+       "Charge fixe hors projet + heures de ses lignes dans l'onglet Charge, comparées à la capacité mensuelle de la "
+       "personne.", "edite_Dessinateurs")
 
-# barre : choix du dessinateur + rappel de ses réglages
-box(5, 6, 0, NG - 1)
-put(5, 0, 4, "Ressource", font(9, True, GREY), h="right", indent=1)
+# barre (lignes 6-7, comme sur le Dashboard) : choix de la ressource + rappel de ses réglages
+B = P_ROW
+box(B, B + 1, 0, NG - 1)
+put(B, 0, 4, "Ressource", font(9, True, GREY), h="right", indent=1)
 for i in range(5, 17):
-    cell = ws.cell(5, gc(i))
+    cell = ws.cell(B, gc(i))
     cell.fill = fill(INPUT_FILL)
     cell.border = Border(top=inp_border, bottom=inp_border,
                          left=inp_border if i == 5 else None, right=inp_border if i == 16 else None)
-put(5, 5, 16, LISTS[4][3][0], font(11, True, INPUT_INK), h="center", bg=INPUT_FILL)
-wb.defined_names["p_Dessinateur"] = DefinedName("p_Dessinateur", attr_text=f"Dessinateurs!${gl(5)}$5")
+put(B, 5, 16, LISTS[4][3][0], font(11, True, INPUT_INK), h="center", bg=INPUT_FILL)
+wb.defined_names["p_Dessinateur"] = DefinedName("p_Dessinateur", attr_text=f"Dessinateurs!${gl(5)}${B}")
 dv = DataValidation(type="list", formula1="lst_Ressources", allow_blank=True, showErrorMessage=True,
                     errorTitle="Ressource inconnue",
                     error="Choisir un nom de la liste (onglet Data : dessinateurs colonne E, externes colonne H).")
-dv.add(f"{gl(5)}5")
+dv.add(f"{gl(5)}{B}")
 ws.add_data_validation(dv)
-put(6, 5, 16, f'=IF({DS["type"]}="Hors liste","Absent des listes Data : réglages par défaut",'
+put(B + 1, 5, 16, f'=IF({DS["type"]}="Hors liste","Absent des listes Data : réglages par défaut",'
              f'IF(aide_Dessinateurs<>"Oui","",IF({DS["type"]}="Externe","Ressource externe (Data, colonne H)",'
              f'"Dessinateur interne (Data, colonne E)")))', font(7, color=MUTED, italic=True), h="center", v="top",
     shrink=True)
-ws.conditional_formatting.add(f"{gl(5)}6", FormulaRule(formula=[f'LEFT(${gl(5)}$6,7)="Absent "'],
+ws.conditional_formatting.add(f"{gl(5)}{B + 1}", FormulaRule(formula=[f'LEFT(${gl(5)}${B + 1},7)="Absent "'],
                                                        font=Font(color=RED_T, bold=True, italic=False)))
 info_lab = font(9, True, GREY)
 info_val = font(10, True, NAVY)
-put(5, 18, 21, "Capacité", info_lab, h="right", indent=1)
-put(5, 22, 25, f"={DS['cap']}", info_val, fmt='#,##0" h"')
-put(5, 27, 31, "Charge fixe", info_lab, h="right", indent=1)
-put(5, 32, 34, f"={DS['fixe']}", info_val, fmt='#,##0" h"')
-put(5, 36, 42, "Dispo. projets", info_lab, h="right", indent=1)
-put(5, 43, 46, f"={DS['capProj']}", info_val, fmt='#,##0" h/mois"')
-put(6, 18, 46, help_formula("aide_Dessinateurs", "par mois · valeurs propres à la personne (Data, colonnes F-G ou "
+put(B, 18, 21, "Capacité", info_lab, h="right", indent=1)
+put(B, 22, 25, f"={DS['cap']}", info_val, fmt='#,##0" h"')
+put(B, 27, 31, "Charge fixe", info_lab, h="right", indent=1)
+put(B, 32, 34, f"={DS['fixe']}", info_val, fmt='#,##0" h"')
+put(B, 36, 42, "Dispo. projets", info_lab, h="right", indent=1)
+put(B, 43, 46, f"={DS['capProj']}", info_val, fmt='#,##0" h/mois"')
+put(B + 1, 18, 46, help_formula("aide_Dessinateurs", "par mois · valeurs propres à la personne (Data, colonnes F-G ou "
                                                   "I-J) ou valeurs par défaut du Dashboard"),
     font(7, color=MUTED, italic=True), h="center", v="top", shrink=True)
-put(5, 48, 57, f"={DS['debut']}", font(9, True, GREY), h="right", fmt='"12 mois dès "MMMM YYYY')
-put(6, 48, 57, f'="Périmètre : "&{DS["perim"]}', font(7, color=MUTED, italic=True), h="right", v="top")
+put(B, 48, 57, f"={DS['debut']}", font(9, True, GREY), h="right", fmt='"12 mois dès "MMMM YYYY')
+put(B + 1, 48, 57, f'="Périmètre : "&{DS["perim"]}', font(7, color=MUTED, italic=True), h="right", v="top")
 
 # ---- synthèse
 section(8, f'=IF({DS["nom"]}="","SYNTHÈSE — choisir une ressource","SYNTHÈSE — "&UPPER({DS["nom"]})'
@@ -1490,7 +1512,7 @@ for (c1, c2), (title, formula, fmt, s1, s2) in zip(TILES, D_KPIS):
     put(13, c1 + 1, c2 - 1, s1[0], sub_f, fmt=s1[1], shrink=True)
     put(14, c1 + 1, c2 - 1, s2[0], sub_f, fmt=s2[1], shrink=True)
 # alertes (formules limitées à l'onglet) : mois le plus chargé > 100 %, mois en surcharge, charge fixe >= capacité
-SEL = f"TRIM(${gl(5)}$5)"
+SEL = f"TRIM(${gl(5)}${B})"
 occ_ref = f"${gl(TILES[2][0] + 1)}$14"
 for r in (12, 14):
     ws.conditional_formatting.add(f"{gl(TILES[2][0] + 1)}{r}",
@@ -1702,11 +1724,9 @@ for i, t in enumerate(D_NOTES):
     put(93 + i, 0, NG - 1, help_formula("aide_Dessinateurs", t) if i < 2 else t,
         font(8, color=GREY if i < 2 else "B45309", italic=i < 2, bold=i >= 2))
 
-# case « Afficher l'aide » en ligne 1, au-dessus du bandeau : hors de la zone imprimée
-put(1, 47, 53, "Afficher l'aide", font(9, True, GREY), h="right", indent=1)
-help_switch(ws, None, f"{gl(54)}1", "aide_Dessinateurs")
-ws.merge_cells(start_row=1, start_column=gc(54), end_row=1, end_column=gc(58))
-ws.print_area = f"A2:{L(gc(NG))}{D_LAST}"
+# case « Afficher l'aide » à droite de la page, hors de la zone imprimée, sous les boutons des macros
+help_switch(ws, BTN_AIDE_LABEL, BTN_AIDE_CELL, "aide_Dessinateurs")
+ws.print_area = f"A1:{L(gc(NG))}{D_LAST}"
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90
