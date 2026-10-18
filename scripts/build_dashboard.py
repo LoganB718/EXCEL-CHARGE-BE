@@ -114,11 +114,12 @@ ws_data["A1"].font = font(14, True, NAVY)
 ws_data["A2"] = ("Saisir une valeur par cellule, sans ligne vide, sous chaque en-tête : les listes déroulantes "
                  "de l'onglet Charge se mettent à jour automatiquement (200 valeurs max par liste). "
                  "Colonnes F-G et I-J : capacité et charge fixe propres à un dessinateur ou à une ressource "
-                 "externe (vide = valeurs par défaut réglées en haut du Dashboard). Les valeurs ci-dessous sont "
-                 "des exemples à remplacer.")
+                 "externe (vide = valeurs par défaut réglées en haut du Dashboard). Colonne K (facultative) : jours "
+                 "non travaillés communs à tout le bureau (fériés, fermeture), retirés du lissage comme les week-ends. "
+                 "Les valeurs ci-dessous sont des exemples à remplacer.")
 ws_data["A2"].font = font(9, color=GREY, italic=True)
 ws_data["A2"].alignment = Alignment(wrap_text=True, vertical="top")
-ws_data.merge_cells("A2:J2")
+ws_data.merge_cells("A2:K2")
 ws_data.row_dimensions[2].height = 26
 ws_data.row_dimensions[3].height = 42
 for col, title, values in DESS_COLS:
@@ -162,6 +163,26 @@ for col, title, name, values in LISTS:
         ws_data[f"{col}{4 + j}"] = v
     wb.defined_names[name] = DefinedName(
         name, attr_text=f"OFFSET(Data!${col}$3,1,0,MAX(1,COUNTA(Data!${col}$4:${col}${DATA_LAST})),1)")
+HOLIDAYS = f"Data!$K$4:$K${DATA_LAST}"   # jours non travaillés communs (dates), retirés du lissage
+ws_data.column_dimensions["K"].width = 22
+h = ws_data["K3"]
+h.value = "Jours non travaillés\n(fériés, fermetures)\nfacultatif"
+h.font = font(9, True, WHITE)
+h.fill = fill("6B7280")
+h.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+for r in range(4, DATA_LAST + 1):
+    c = ws_data[f"K{r}"]
+    c.font = font(10)
+    c.number_format = "DD/MM/YYYY"
+    c.alignment = Alignment(horizontal="center")
+    c.border = Border(bottom=side("E5E7EB"), left=side("E5E7EB"), right=side("E5E7EB"))
+dv = DataValidation(type="date", operator="greaterThan", formula1="36526", allow_blank=True, showErrorMessage=True,
+                    errorTitle="Date attendue", error="Saisir uniquement des dates (jj/mm/aaaa), une par cellule.",
+                    showInputMessage=True, promptTitle="Jours non travaillés",
+                    prompt="Facultatif : jours fériés ou de fermeture communs à tout le bureau. Ils sont retirés "
+                           "du lissage, comme les samedis et dimanches. Les congés individuels ne se saisissent pas ici.")
+dv.add(f"K4:K{DATA_LAST}")
+ws_data.add_data_validation(dv)
 ws_data.freeze_panes = "A4"
 ws_data.sheet_properties.tabColor = "6B7280"
 
@@ -377,7 +398,7 @@ ws["A1"].font = font(12, True, NAVY)
 LINE_COLS = {
     "A": "Ligne (onglet Charge)", "B": "Affaire valide (projet renseigné)", "C": "Avancement (0-1)",
     "D": "Incluse dans le périmètre", "E": "Charge incluse (h)", "F": "Chef de projet", "G": "Projet",
-    "H": "Type", "I": "Début planifié", "J": "Fin de répartition", "K": "Durée (jours)",
+    "H": "Type", "I": "Début planifié", "J": "Fin de répartition", "K": "Jours ouvrés de la période",
     "L": "Rang affaire (charge décroissante)",
     "M": "1re occurrence chef", "N": "Charge du chef", "O": "Rang chef",
     "P": "1re occurrence projet", "Q": "Charge du projet", "R": "Rang projet",
@@ -414,7 +435,7 @@ for r in range(R1, R2 + 1):
         "I": f'=IF(AND(D{r}=1,ISNUMBER(Charge!N{r})),Charge!N{r},"")',
         "J": f'=IF(I{r}="","",IF(AND(p_Repartition="{REP_SMOOTH}",ISNUMBER(Charge!F{r})),'
              f'IF(Charge!F{r}>=I{r},Charge!F{r},I{r}),I{r}))',
-        "K": f'=IF(I{r}="","",J{r}-I{r}+1)',
+        "K": f'=IF(I{r}="","",NETWORKDAYS(I{r},J{r},{HOLIDAYS}))',
         "L": f'=IF(D{r}=1,COUNTIFS($D${R1}:$D${R2},1,$E${R1}:$E${R2},">"&E{r})'
              f'+COUNTIFS($D${R1}:$D{r},1,$E${R1}:$E{r},E{r}),"")',
         "V": f'=IF(D{r}=1,MIN(INDEX($R${R1}:$R${R2},MATCH(G{r},$G${R1}:$G${R2},0)),'
@@ -429,8 +450,10 @@ for r in range(R1, R2 + 1):
     for col, formula in f.items():
         ws[f"{col}{r}"] = formula
     for mc in MCOLS:
+        # heures réparties au prorata des jours ouvrés ; période sans aucun jour ouvré : tout sur le mois de début
         ws[f"{mc}{r}"] = (f'=IF(OR($I{r}="",$E{r}=0),0,IF(OR($J{r}<{mc}$3,$I{r}>{mc}$2),0,'
-                          f'$E{r}*(MIN($J{r},{mc}$2)-MAX($I{r},{mc}$3)+1)/$K{r}))')
+                          f'IF($K{r}=0,IF(AND($I{r}>={mc}$3,$I{r}<={mc}$2),$E{r},0),'
+                          f'$E{r}*NETWORKDAYS(MAX($I{r},{mc}$3),MIN($J{r},{mc}$2),{HOLIDAYS})/$K{r})))')
         ws[f"{mc}{r}"].number_format = "0.0"
     ws[f"{SUM_COL}{r}"] = f"=SUM({MCOLS[0]}{r}:{MCOLS[-1]}{r})"
     ws[f"{SUM_COL}{r}"].number_format = "0.0"
@@ -927,7 +950,7 @@ defaults = {"p_Perimetre": PERIM_RUN, "p_Repartition": REP_SMOOTH, "p_PremierMoi
             "p_ChargeFixe": 20}
 hints = {"p_Perimetre": ("En cours = avancement < 100 %", None),
          "p_Repartition": (f'=IF(p_Repartition="{REP_START}","Toute la charge sur le mois de début planifié",'
-                           f'"Prorata des jours entre début planifié et date de besoin")', None),
+                           f'"Prorata des jours ouvrés entre début planifié et date de besoin")', None),
          "p_PremierMois": ('=IF(ISNUMBER(p_PremierMois),"Saisi manuellement",Calculs!$AL$13)',
                            '"Vide = auto ("MMM YYYY")"'),
          "p_HeuresETP": ("par personne", None),
@@ -1313,9 +1336,9 @@ NOTES = [
     "chef de projet affiché = celui de sa 1re ligne ; avancement = moyenne de ses lignes pondérée par leurs heures.",
     "En cours = ligne dont l'avancement (O) est inférieur à 100 % : une ressource qui a terminé sa part sort du "
     "périmètre « Projets en cours », même si d'autres ressources continuent l'affaire.",
-    "Charge par mois : la charge estimée (M) est répartie au prorata des jours calendaires entre la date de "
-    "début planifiée (N) et la date de besoin (F). Sans date de besoin, ou si elle précède le début, "
-    "toute la charge est placée sur le mois de début.",
+    "Charge par mois : les heures (M) sont réparties au prorata des jours ouvrés (lundi au vendredi, hors jours "
+    "non travaillés de l'onglet Data) entre le début planifié (N) et la date de besoin (F) ; sans date de besoin "
+    "valable, tout va sur le mois de début.",
     "Au-delà de 9 projets, les plus petits sont regroupés en « Autres projets » (gris) dans les graphiques.",
     "ETP = heures de projet ÷ (capacité − charge fixe hors projet) d'une personne sur un mois, soit 100 h avec les "
     "valeurs par défaut (120 h − 20 h, réglables en haut de page).  Charge par ressource : onglet Dessinateurs.",
