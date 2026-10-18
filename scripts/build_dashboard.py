@@ -3,6 +3,7 @@
 
 Usage : python scripts/build_dashboard.py [chemin_sortie.xlsx]
 """
+import re
 import sys
 from datetime import date
 
@@ -51,6 +52,7 @@ N_MONTHS = 12                   # ne pas augmenter : les blocs de l'onglet Calcu
 assert N_MONTHS <= 12
 N_TABLE = 100                   # lignes du tableau des affaires sur le Dashboard
 
+NA_LABEL = "(non affecté)"          # ressource d'une ligne sans dessinateur ni ressource externe
 PERIM_ALL = "Tous les projets"
 PERIM_RUN = "Projets en cours"
 REP_SMOOTH = "Lissée jusqu'à la date de besoin"
@@ -159,7 +161,7 @@ for col, title, name, values in LISTS:
     for j, v in enumerate(values):
         ws_data[f"{col}{4 + j}"] = v
     wb.defined_names[name] = DefinedName(
-        name, attr_text=f"OFFSET(Data!${col}$4,0,0,MAX(1,COUNTA(Data!${col}$4:${col}${DATA_LAST})),1)")
+        name, attr_text=f"OFFSET(Data!${col}$3,1,0,MAX(1,COUNTA(Data!${col}$4:${col}${DATA_LAST})),1)")
 ws_data.freeze_panes = "A4"
 ws_data.sheet_properties.tabColor = "6B7280"
 
@@ -178,7 +180,7 @@ CHARGE_COLS = [
     ("J", "Coordinateur", 18, "lst_Coordinateurs", None),
     ("K", "Dessinateur projeteur (interne)", 20, "lst_Dessinateurs", None),
     ("L", "OU ressource externe", 20, "lst_Prestataires", None),
-    ("M", "Charge de travail estimée (h)", 13, None, None),
+    ("M", "Heures de cette ressource (h)", 13, None, None),
     ("N", "Date de début planifiée", 13, None, "DD/MM/YYYY"),
     ("O", "Taux d'avancement", 13, None, "0%"),
 ]
@@ -250,11 +252,16 @@ assert all(len(row) == 15 for row in SAMPLE)
 ws = ws_charge
 ws["A1"] = "PLAN DE CHARGE — BUREAU D'ÉTUDES"
 ws["A1"].font = font(14, True, NAVY)
-ws["A2"] = ("Une ligne = une ressource sur un sous-projet : un dessinateur (K) OU une ressource externe (L), "
-            "avec SES heures en M.  Plusieurs ressources sur le même sous-projet = plusieurs lignes (mêmes A à J).  "
-            "Listes déroulantes alimentées par l'onglet Data.  Les lignes 4 à "
+ws["A2"] = ("UNE LIGNE = UNE RESSOURCE sur un sous-projet : un dessinateur (K) OU une ressource externe (L), avec SES "
+            "heures en M.  Pour mettre plusieurs personnes sur un sous-projet, recopier la ligne (colonnes A à J à "
+            "l'identique) et changer la ressource et les heures.  Couleurs : rouge = dessinateur ET externe sur la "
+            "même ligne (à corriger, seul K est compté) ; orange = aucune ressource (charge à affecter).  "
+            "Insérer, supprimer ou trier des lignes est possible.  Les lignes 4 à "
             f"{FIRST + len(SAMPLE) - 1} sont des EXEMPLES FICTIFS à remplacer par vos données.")
 ws["A2"].font = font(9, color=GREY, italic=True)
+ws["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+ws.merge_cells("A2:I2")
+ws.row_dimensions[2].height = 38
 ws.row_dimensions[1].height = 24
 ws.row_dimensions[3].height = 48
 thin = side("D9DEE5")
@@ -286,11 +293,18 @@ ws.freeze_panes = "C4"
 ws.auto_filter.ref = f"A3:O{LAST}"
 ws.sheet_view.zoomScale = 90
 
+PROMPTS = {
+    "K": ("Dessinateur interne", "Une seule ressource par ligne : remplir K OU L, pas les deux. Pour une 2e personne, "
+                                 "recopier la ligne et changer la ressource et les heures."),
+    "L": ("Ressource externe", "À remplir seulement si la ligne n'a pas de dessinateur interne (K vide)."),
+}
 for col, _, _, lst, _ in CHARGE_COLS:
     if lst:
         dv = DataValidation(type="list", formula1=lst, allow_blank=True, errorStyle="warning",
                             showErrorMessage=True, errorTitle="Valeur hors liste",
-                            error="Cette valeur n'est pas dans la liste de l'onglet Data. Continuer quand même ?")
+                            error="Cette valeur n'est pas dans la liste de l'onglet Data. Continuer quand même ?",
+                            showInputMessage=col in PROMPTS, promptTitle=PROMPTS.get(col, ("", ""))[0] or None,
+                            prompt=PROMPTS.get(col, ("", ""))[1] or None)
         dv.add(f"{col}{FIRST}:{col}{LAST}")
         ws.add_data_validation(dv)
 for col in "FN":
@@ -300,7 +314,9 @@ for col in "FN":
     ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="greaterThanOrEqual", formula1="0", allow_blank=True,
                     showErrorMessage=True, errorTitle="Nombre d'heures",
-                    error="Saisir un nombre d'heures positif.")
+                    error="Saisir un nombre d'heures positif.", showInputMessage=True,
+                    promptTitle="Heures de cette ressource",
+                    prompt="Heures de la personne de cette ligne seulement (pas le total du sous-projet).")
 dv.add(f"M{FIRST}:M{LAST}")
 ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="between", formula1="0", formula2="1", allow_blank=True,
@@ -407,7 +423,7 @@ for r in range(R1, R2 + 1):
     # chefs (F), projets (G), types (H) : 1re occurrence, charge cumulée, rang décroissant
     for key, first, tot, rank in (("F", "M", "N", "O"), ("G", "P", "Q", "R"), ("H", "S", "T", "U")):
         f[first] = f'=IF({key}{r}="",0,IF(COUNTIF(${key}${R1}:{key}{r},{key}{r})=1,1,0))'
-        f[tot] = f'=IF({first}{r}=1,SUMIF(${key}${R1}:${key}${R2},{key}{r},$E${R1}:$E${R2}),"")'
+        f[tot] = f'=IF({first}{r}=1,ROUND(SUMIF(${key}${R1}:${key}${R2},{key}{r},$E${R1}:$E${R2}),2),"")'
         f[rank] = (f'=IF({first}{r}=1,COUNTIFS(${first}${R1}:${first}${R2},1,${tot}${R1}:${tot}${R2},">"&{tot}{r})'
                    f'+COUNTIFS(${first}${R1}:{first}{r},1,${tot}${R1}:{tot}{r},{tot}{r}),"")')
     for col, formula in f.items():
@@ -568,9 +584,11 @@ for k in range(1, N_TABLE + 1):
     ws[f"BX{r}"] = f'=IFERROR(MATCH(BW{r},$EQ${R1}:$EQ${R2},0),"")'
 
 # ---- Affaires = sous-projets regroupés (projet + sous-projet + produit), toutes ressources confondues
-AFF_COLS = [("EM", "Type de ressource de la ligne"), ("EN", "Clé affaire (projet | sous-projet | produit)"),
+AFF_COLS = [("FD", "Ligne avec dessinateur ET externe (1 = à corriger)"),
+            ("FE", "1re ligne de cette ressource sur l'affaire"), ("EM", "Type de ressource de la ligne"), ("EN", "Clé affaire (projet | sous-projet | produit)"),
             ("EO", "1re ligne de l'affaire"), ("EP", "Charge de l'affaire (h)"), ("EQ", "Rang de l'affaire"),
-            ("ER", "Ressources internes"), ("ES", "Ressources externes"), ("ET", "Ressources (texte)"),
+            ("ER", "Personnes internes (distinctes)"), ("ES", "Personnes externes (distinctes)"),
+            ("ET", "Ressources (texte)"),
             ("EU", "Avancement de l'affaire (pondéré par les heures)"), ("EV", "Début de la ligne (31/12/9999 = vide)"),
             ("EW", "Début de l'affaire (le plus tôt)"), ("EX", "Besoin de la ligne (0 = vide)"),
             ("EY", "Besoin de l'affaire (le plus tard)")]
@@ -585,15 +603,21 @@ A_RNG = {c: f"${c}${R1}:${c}${R2}" for c in ("C", "E", "EM", "EN", "EO", "EP", "
 for r in range(R1, R2 + 1):
     ws[f"EM{r}"] = (f'=IF(D{r}=1,IF(TRIM(Charge!K{r})<>"","Interne",IF(TRIM(Charge!L{r})<>"","Externe",'
                     f'"Non affecté")),"")')
-    ws[f"EN{r}"] = (f'=IF(D{r}=1,LEFT(TRIM(Charge!B{r})&" | "&TRIM(Charge!C{r})&" | "&TRIM(Charge!D{r}),240),"")')
+    part = lambda c: f'TRIM(SUBSTITUTE(Charge!{c}{r},CHAR(160)," "))'
+    ws[f"EN{r}"] = (f'=IF(D{r}=1,LEFT(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({part("B")}&" | "&{part("C")}&" | "&{part("D")},'
+                    f'"~","-"),"*","+"),"?","!"),240),"")')
     ws[f"EO{r}"] = f'=IF(EN{r}="",0,IF(COUNTIF($EN${R1}:EN{r},EN{r})=1,1,0))'
-    ws[f"EP{r}"] = f'=IF(EO{r}=1,SUMIF({A_RNG["EN"]},EN{r},{A_RNG["E"]}),"")'
+    ws[f"EP{r}"] = f'=IF(EO{r}=1,ROUND(SUMIF({A_RNG["EN"]},EN{r},{A_RNG["E"]}),2),"")'
     ws[f"EQ{r}"] = (f'=IF(EO{r}=1,COUNTIFS({A_RNG["EO"]},1,{A_RNG["EP"]},">"&EP{r})'
                     f'+COUNTIFS($EO${R1}:EO{r},1,$EP${R1}:EP{r},EP{r}),"")')
-    ws[f"ER{r}"] = f'=IF(EO{r}=1,COUNTIFS({A_RNG["EN"]},EN{r},{A_RNG["EM"]},"Interne"),"")'
-    ws[f"ES{r}"] = f'=IF(EO{r}=1,COUNTIFS({A_RNG["EN"]},EN{r},{A_RNG["EM"]},"Externe"),"")'
+    ws[f"FD{r}"] = f'=IF(AND(B{r}=1,TRIM(Charge!K{r})<>"",TRIM(Charge!L{r})<>""),1,0)'
+    ws[f"FE{r}"] = (f'=IF(OR(EN{r}="",BZ{r}="{NA_LABEL}"),0,'
+                    f'IF(COUNTIFS($EN${R1}:EN{r},EN{r},$BZ${R1}:BZ{r},BZ{r})=1,1,0))')
+    ws[f"ER{r}"] = f'=IF(EO{r}=1,COUNTIFS({A_RNG["EN"]},EN{r},{A_RNG["EM"]},"Interne",$FE${R1}:$FE${R2},1),"")'
+    ws[f"ES{r}"] = f'=IF(EO{r}=1,COUNTIFS({A_RNG["EN"]},EN{r},{A_RNG["EM"]},"Externe",$FE${R1}:$FE${R2},1),"")'
     ws[f"ET{r}"] = (f'=IF(EO{r}=1,IF(ER{r}+ES{r}=0,"à affecter",IF(ER{r}=0,ES{r}&" ext.",'
-                    f'(ER{r}+ES{r})&IF(ES{r}>0," dont "&ES{r}&" ext.",""))),"")')
+                    f'(ER{r}+ES{r})&IF(ES{r}>0," dont "&ES{r}&" ext.",""))'
+                    f'&IF(COUNTIFS({A_RNG["EN"]},EN{r},{A_RNG["EM"]},"Non affecté")>0," + à affecter","")),"")')
     ws[f"EU{r}"] = (f'=IF(EO{r}=1,IF(EP{r}>0,SUMPRODUCT(({A_RNG["EN"]}=EN{r})*{A_RNG["E"]}*{A_RNG["C"]})/EP{r},'
                     f'AVERAGEIF({A_RNG["EN"]},EN{r},{A_RNG["C"]})),"")')
     ws[f"EV{r}"] = f"=IF(ISNUMBER(I{r}),I{r},2958465)"
@@ -609,7 +633,6 @@ for r in range(R1, R2 + 1):
 # ---- Charge par ressource (dessinateur interne ou ressource externe)
 N_DESS = 16          # ressources affichées dans le tableau d'occupation de l'équipe
 N_DESS_AFF = 15      # affaires listées pour le dessinateur sélectionné
-NA_LABEL = "(non affecté)"
 
 
 def hdr(col, text, width=None):
@@ -632,11 +655,11 @@ for r in range(R1, R2 + 1):
 # noms des dessinateurs de la liste Data, sans espaces superflus (EJ)
 hdr("EJ", "Dessinateurs Data (nettoyés)", 18)
 for d in range(4, DATA_LAST + 1):
-    ws[f"EJ{d}"] = f"=TRIM(Data!$E${d})"
+    ws[f"EJ{d}"] = f"=TRIM(INDEX(Data!$E:$E,ROW()))"
 DATA_NAMES = f"$EJ$4:$EJ${DATA_LAST}"
 hdr("EK", "Ressources externes Data (nettoyées)", 18)
 for d in range(4, DATA_LAST + 1):
-    ws[f"EK{d}"] = f"=TRIM(Data!$H${d})"
+    ws[f"EK{d}"] = f"=TRIM(INDEX(Data!$H:$H,ROW()))"
 DATA_EXT = f"$EK$4:$EK${DATA_LAST}"
 N_RES = 2 * (DATA_LAST - 3)   # capacité de la liste commune (dessinateurs puis externes)
 hdr("FA", "Ressources : dessinateurs puis externes (liste déroulante)", 22)
@@ -656,17 +679,18 @@ DESS_IND = [
     ("pos", "Position dans la liste des dessinateurs (0 = absent)",
      f"=IF(CD4=\"\",0,IFERROR(MATCH(CD4,{DATA_NAMES},0),0))", "0"),
     ("cap", "Capacité mensuelle (h)",
-     f"=IF(CD4=\"\",0,IF(CD5>0,IF(ISNUMBER(INDEX(Data!$F$4:$F${DATA_LAST},CD5)),"
-     f"INDEX(Data!$F$4:$F${DATA_LAST},CD5),p_HeuresETP),IF(CD24>0,IF(ISNUMBER(INDEX(Data!$I$4:$I${DATA_LAST},CD24)),"
-     f"INDEX(Data!$I$4:$I${DATA_LAST},CD24),p_HeuresETP),p_HeuresETP)))", "#,##0.0"),
+     f"=IF(CD4=\"\",0,IF(CD5>0,IF(ISNUMBER(INDEX(Data!$F:$F,CD5+3)),"
+     f"INDEX(Data!$F:$F,CD5+3),p_HeuresETP),IF(CD24>0,IF(ISNUMBER(INDEX(Data!$I:$I,CD24+3)),"
+     f"INDEX(Data!$I:$I,CD24+3),p_HeuresETP),p_HeuresETP)))", "#,##0.0"),
     ("fixe", "Charge fixe hors projet (h/mois)",
-     f"=IF(CD4=\"\",0,IF(CD5>0,IF(ISNUMBER(INDEX(Data!$G$4:$G${DATA_LAST},CD5)),"
-     f"INDEX(Data!$G$4:$G${DATA_LAST},CD5),p_ChargeFixe),IF(CD24>0,IF(ISNUMBER(INDEX(Data!$J$4:$J${DATA_LAST},CD24)),"
-     f"INDEX(Data!$J$4:$J${DATA_LAST},CD24),p_ChargeFixe),p_ChargeFixe)))", "#,##0.0"),
+     f"=IF(CD4=\"\",0,IF(CD5>0,IF(ISNUMBER(INDEX(Data!$G:$G,CD5+3)),"
+     f"INDEX(Data!$G:$G,CD5+3),p_ChargeFixe),IF(CD24>0,IF(ISNUMBER(INDEX(Data!$J:$J,CD24+3)),"
+     f"INDEX(Data!$J:$J,CD24+3),p_ChargeFixe),p_ChargeFixe)))", "#,##0.0"),
     ("capProj", "Capacité disponible pour les projets (h/mois)", "=MAX(0,CD6-CD7)", "#,##0.0"),
     ("chargeTot", "Charge projets affectée, toutes périodes (h)",
      f'=IF(CD4="",0,SUMIF($BZ${R1}:$BZ${R2},CD4,$E${R1}:$E${R2}))', "#,##0.0"),
-    ("nbAff", "Nombre de lignes affectées", f'=IF(CD4="",0,COUNTIF($BZ${R1}:$BZ${R2},CD4))', "0"),
+    ("nbAff", "Nombre d'affaires (sous-projets) de la ressource",
+     f'=IF(CD4="",0,COUNTIFS($BZ${R1}:$BZ${R2},CD4,$FE${R1}:$FE${R2},1))', "0"),
     ("periode", "Charge projets sur la période affichée (h)", "=SUM(CI4:CI15)", "#,##0.0"),
     ("pic", "Mois le plus chargé : charge totale (h)", "=MAX(CJ4:CJ15)", "#,##0.0"),
     ("picIdx", "Rang du mois le plus chargé", "=MATCH(CD12,CJ4:CJ15,0)", "0"),
@@ -684,8 +708,8 @@ DESS_IND = [
      f"=IF(OR(CD4=\"\",CD5>0),0,IFERROR(MATCH(CD4,{DATA_EXT},0),0))", "0"),
     ("type", "Type de ressource", '=IF(CD4="","",IF(CD5>0,"Interne",IF(CD24>0,"Externe","Hors liste")))', "General"),
     ("nbExt", "Nombre de ressources externes dans la liste Data", f"=COUNTA(Data!$H$4:$H${DATA_LAST})", "0"),
-    ("nbDouble", "Lignes avec un dessinateur ET une ressource externe (à corriger)",
-     f'=SUMPRODUCT(($B${R1}:$B${R2}=1)*(TRIM(Charge!$K${R1}:$K${R2})<>"")*(TRIM(Charge!$L${R1}:$L${R2})<>""))', "0"),
+    ("nbDouble", "Lignes avec un dessinateur ET une ressource externe (à corriger)", f"=SUM(FD{R1}:FD{R2})", "0"),
+    ("nbLignes", "Nombre de lignes de la ressource", f'=IF(CD4="",0,COUNTIF($BZ${R1}:$BZ${R2},CD4))', "0"),
 ]
 hdr("CC", "Dessinateur sélectionné", 40)
 hdr("CD", "Valeur", 14)
@@ -756,8 +780,8 @@ for k in range(1, N_DESS + 1):
     dup = f"COUNTIF($FA$4:FA{r - 1},FA{r})>0" if r > 4 else "FALSE"
     ws[f"{TEAM_NAME}{r}"] = f'=IF(OR(FA{r}="",{dup}),"",FA{r})'
     for col_t, d_int, d_ext, dflt in ((TEAM_CAP, "F", "I", "p_HeuresETP"), (TEAM_FIX, "G", "J", "p_ChargeFixe")):
-        v_int = f"INDEX(Data!${d_int}$4:${d_int}${DATA_LAST},{k})"
-        v_ext = f"INDEX(Data!${d_ext}$4:${d_ext}${DATA_LAST},{k}-$CD$23)"
+        v_int = f"INDEX(Data!${d_int}:${d_int},{k + 3})"
+        v_ext = f"INDEX(Data!${d_ext}:${d_ext},{k + 3}-$CD$23)"
         ws[f"{col_t}{r}"] = (f'=IF({TEAM_NAME}{r}="","",IF(FB{r}="Interne",IF(ISNUMBER({v_int}),{v_int},{dflt}),'
                              f'IF(ISNUMBER({v_ext}),{v_ext},{dflt})))')
     for m in range(N_MONTHS):
@@ -794,15 +818,24 @@ for k in range(1, N_DESS_AFF + 1):
     ws[f"DX{r}"] = k
     ws[i] = f'=IFERROR(MATCH(DX{r},$CA${R1}:$CA${R2},0),"")'
     for c, col in (("DZ", "B"), ("EA", "C"), ("EB", "D"), ("EC", "A")):
-        ws[f"{c}{r}"] = f'=IF({i}="","",INDEX(Charge!${col}${R1}:${col}${R2},{i})&"")'
+        ws[f"{c}{r}"] = f'=IF({i}="","",INDEX(Charge!${col}:${col},{i}+{R1 - 1})&"")'
     ws[f"ED{r}"] = f'=IF({i}="","",INDEX($E${R1}:$E${R2},{i}))'
     ws[f"EE{r}"] = f'=IF({i}="","",INDEX(${SUM_COL}${R1}:${SUM_COL}${R2},{i}))'
     for c, col in (("EF", "N"), ("EG", "F")):
-        src = f"INDEX(Charge!${col}${R1}:${col}${R2},{i})"
+        src = f"INDEX(Charge!${col}:${col},{i}+{R1 - 1})"
         ws[f"{c}{r}"] = f'=IF({i}="","",IF(ISNUMBER({src}),{src},"—"))'
         ws[f"{c}{r}"].number_format = "DD/MM/YYYY"
     ws[f"EH{r}"] = f'=IF({i}="","",INDEX($C${R1}:$C${R2},{i}))'
     ws[f"EH{r}"].number_format = "0%"
+
+# Chaque ligne de Calculs lit la même ligne de Charge par INDEX(colonne entière ; ROW()) : insérer, supprimer
+# ou trier des lignes dans l'onglet Charge ne décale ni ne casse les calculs.
+_rel = re.compile(r"Charge!([A-O])(\d+)(?![\d:])")
+for row in ws.iter_rows(min_row=R1, max_row=R2):
+    for cell in row:
+        if isinstance(cell.value, str) and "Charge!" in cell.value:
+            cell.value = _rel.sub(lambda m, rr=cell.row: (f"INDEX(Charge!${m.group(1)}:${m.group(1)},ROW())"
+                                                          if int(m.group(2)) == rr else m.group(0)), cell.value)
 
 ws.freeze_panes = "B4"
 
@@ -929,20 +962,21 @@ ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="between", formula1="1", formula2="744", allow_blank=False,
                     showErrorMessage=True, error="Saisir la capacité mensuelle d'une personne en heures (ex. 120).",
                     showInputMessage=True, promptTitle="Capacité par défaut",
-                    prompt="Heures disponibles par mois pour un dessinateur. Une valeur propre à une personne "
-                           "peut être saisie dans l'onglet Data (colonne F).")
+                    prompt="Heures disponibles par mois pour une personne (dessinateur ou externe). Valeur "
+                           "propre à une personne : onglet Data, colonne F (dessinateur) ou I (externe).")
 dv.add(f"{gl(PARAMS['p_HeuresETP'][0])}{P_ROW}")
 ws.add_data_validation(dv)
 dv = DataValidation(type="decimal", operator="between", formula1="0", formula2="744", allow_blank=False,
                     showErrorMessage=True, error="Saisir un nombre d'heures par mois (ex. 20).",
                     showInputMessage=True, promptTitle="Charge fixe hors projet",
-                    prompt="Heures prises chaque mois hors affaires (petites modifications de plans...). "
-                           "Une valeur propre à une personne peut être saisie dans l'onglet Data (colonne G).")
+                    prompt="Heures prises chaque mois hors affaires (petites modifications de plans...). Valeur "
+                           "propre : onglet Data, colonne G (dessinateur) ou J (externe).")
 dv.add(f"{gl(PARAMS['p_ChargeFixe'][0])}{P_ROW}")
 ws.add_data_validation(dv)
 
 # ---- Section 1 : projets en cours
 section(8, f'=IF(p_Perimetre="{PERIM_ALL}","TOUS LES PROJETS","PROJETS EN COURS")')
+put(8, 24, NG - 1, f'=IF(Calculs!$CD$27>0,"Attention : "&Calculs!$CD$27&" ligne(s) de Charge ont un dessinateur ET une ressource externe (en rouge dans Charge)","")', font(9, True, RED_T), h="right", v="bottom", shrink=True)
 CARDS = [(0, 13), (15, 28), (30, 43), (45, 58)]
 H_FMT = '#,##0" h"'
 title_f = font(9, True, GREY)
@@ -1024,7 +1058,8 @@ POP = [  # (libellé, colonne source, onglet source, type) — affaire = sous-pr
 for k, (lab, col, sheet, kind) in enumerate(POP):
     r = 15 + k
     put(r, c1 + 1, c1 + 5, lab, pop_lab, bg=NAVY)
-    src = f"INDEX({sheet}!${col}${R1}:${col}${R2},{IDX})"
+    src = (f"INDEX(Charge!${col}:${col},{IDX}+{R1 - 1})" if sheet == "Charge"
+           else f"INDEX({sheet}!${col}${R1}:${col}${R2},{IDX})")
     if kind == "text":
         formula, fmt = f'=IF({IDX}="","—",{src}&"")', None
     elif kind == "debut":
@@ -1231,10 +1266,10 @@ for k in range(1, N_TABLE + 1):
         cell.fill = fill(BG)
     vals = [
         f'=IF({idx}="","",Calculs!$BW${3 + k})',
-        f'=IF({idx}="","",INDEX(Charge!$B${R1}:$B${R2},{idx})&"")',
-        f'=IF({idx}="","",INDEX(Charge!$C${R1}:$C${R2},{idx})&"")',
-        f'=IF({idx}="","",INDEX(Charge!$D${R1}:$D${R2},{idx})&"")',
-        f'=IF({idx}="","",INDEX(Charge!$A${R1}:$A${R2},{idx})&"")',
+        f'=IF({idx}="","",INDEX(Charge!$B:$B,{idx}+{R1 - 1})&"")',
+        f'=IF({idx}="","",INDEX(Charge!$C:$C,{idx}+{R1 - 1})&"")',
+        f'=IF({idx}="","",INDEX(Charge!$D:$D,{idx}+{R1 - 1})&"")',
+        f'=IF({idx}="","",INDEX(Charge!$A:$A,{idx}+{R1 - 1})&"")',
         f'=IF({idx}="","",INDEX(Calculs!$ET${R1}:$ET${R2},{idx}))',
         f'=IF({idx}="","",INDEX(Calculs!$EP${R1}:$EP${R2},{idx}))',
         f'=IF({idx}="","",IF({K["total"]}=0,0,INDEX(Calculs!$EP${R1}:$EP${R2},{idx})/{K["total"]}))',
@@ -1269,19 +1304,21 @@ ws.conditional_formatting.add(f"{adv_col}{TABLE_R1}:{adv_col}{TABLE_R2}",
 
 NOTE_R = TABLE_R2 + 2
 put(NOTE_R, 0, NG - 1,
-    f'=IF({K["nbAff"]}>{N_TABLE},"Attention : seules les {N_TABLE} premières affaires (par charge) sont '
-    f'listées sur "&{K["nbAff"]}&".",IF(Calculs!$CD$27>0,"Attention : "&Calculs!$CD$27&" ligne(s) de l\'onglet '
-    f'Charge ont à la fois un dessinateur (K) et une ressource externe (L) : une seule ressource par ligne.",""))',
-    font(9, True, "B45309"))
+    f'=TRIM(IF({K["nbAff"]}>{N_TABLE},"Attention : seules les {N_TABLE} premières affaires (par charge) sont '
+    f'listées sur "&{K["nbAff"]}&".  ","")&IF(Calculs!$CD$27>0,"Attention : "&Calculs!$CD$27&" ligne(s) de '
+    f'l\'onglet Charge ont à la fois un dessinateur (K) et une ressource externe (L) : une seule ressource par '
+    f'ligne.",""))', font(9, True, "B45309"))
 NOTES = [
-    "Affaire = un sous-projet (projet + sous-projet + produit) : les lignes de ses ressources (une ligne par "
-    "dessinateur ou ressource externe) sont additionnées.  En cours = ligne dont l'avancement (O) est < 100 %.",
+    "Affaire = un sous-projet (projet + sous-projet + produit) : les lignes de ses ressources sont additionnées ; "
+    "chef de projet affiché = celui de sa 1re ligne ; avancement = moyenne de ses lignes pondérée par leurs heures.",
+    "En cours = ligne dont l'avancement (O) est inférieur à 100 % : une ressource qui a terminé sa part sort du "
+    "périmètre « Projets en cours », même si d'autres ressources continuent l'affaire.",
     "Charge par mois : la charge estimée (M) est répartie au prorata des jours calendaires entre la date de "
     "début planifiée (N) et la date de besoin (F). Sans date de besoin, ou si elle précède le début, "
     "toute la charge est placée sur le mois de début.",
     "Au-delà de 9 projets, les plus petits sont regroupés en « Autres projets » (gris) dans les graphiques.",
     "ETP = heures de projet ÷ (capacité − charge fixe hors projet) d'une personne sur un mois, soit 100 h avec les "
-    "valeurs par défaut (120 h − 20 h, réglables en haut de page).  Charge par dessinateur : onglet Dessinateurs.",
+    "valeurs par défaut (120 h − 20 h, réglables en haut de page).  Charge par ressource : onglet Dessinateurs.",
 ]
 for i, t in enumerate(NOTES):
     put(NOTE_R + 1 + i, 0, NG - 1, t, font(8, color=GREY, italic=True))
@@ -1371,6 +1408,7 @@ put(6, 48, 57, f'="Périmètre : "&{DS["perim"]}', font(7, color=MUTED, italic=T
 # ---- synthèse
 section(8, f'=IF({DS["nom"]}="","SYNTHÈSE — choisir une ressource","SYNTHÈSE — "&UPPER({DS["nom"]})'
             f'&IF({DS["type"]}="Externe","  (RESSOURCE EXTERNE)",""))')
+put(8, 30, NG - 1, f'=IF(Calculs!$CD$27>0,"Attention : "&Calculs!$CD$27&" ligne(s) de Charge ont un dessinateur ET une ressource externe (en rouge dans Charge)","")', font(9, True, RED_T), h="right", v="bottom", shrink=True)
 D_KPIS = [
     ("CAPACITÉ MENSUELLE", f"={DS['cap']}", H_FMT,
      (f"={DS['fixe']}", '"dont "#,##0" h de charge fixe"'),
@@ -1519,7 +1557,7 @@ def occ_cf(rng_txt, ref):
 occ_cf(row_rng(45), f"{first}45")
 
 # ---- affaires du dessinateur
-section(48, f'=IF({DS["nom"]}="","AFFAIRES DU DESSINATEUR","AFFAIRES DE "&UPPER({DS["nom"]})&" (par charge décroissante)")')
+section(48, f'=IF({DS["nom"]}="","AFFAIRES DE LA RESSOURCE","AFFAIRES DE "&UPPER({DS["nom"]})&" (par charge décroissante)")')
 D_TCOLS = [("N°", 2, "center", "0", "DX"), ("Projet", 9, "left", None, "DZ"), ("Sous-projet", 9, "left", None, "EA"),
            ("Produit", 9, "left", None, "EB"), ("Chef de projet", 7, "left", None, "EC"),
            ("Charge (h)", 5, "right", "#,##0", "ED"), ("Heures sur la période", 6, "right", "#,##0", "EE"),
@@ -1549,9 +1587,9 @@ ws.conditional_formatting.add(d_tbl, FormulaRule(formula=[f'AND(${gl(0)}51<>"",M
 ws.conditional_formatting.add(d_tbl, FormulaRule(formula=[f'${gl(0)}51<>""'], border=Border(bottom=row_line),
                                                  fill=PatternFill("solid", start_color=WHITE, end_color=WHITE,
                                                                   bgColor=WHITE)))
-put(66, 0, NG - 1, f'=IF({DS["nbAff"]}>{N_DESS_AFF},"Seules les {N_DESS_AFF} plus grosses affaires sont listées sur "'
-                   f'&{DS["nbAff"]}&".",IF(AND({DS["nom"]}<>"",{DS["nbAff"]}=0),"Aucune affaire affectée à ce '
-                   f'dessinateur dans le périmètre.",""))', font(9, True, "B45309"))
+put(66, 0, NG - 1, f'=IF({DS["nbLignes"]}>{N_DESS_AFF},"Seules les {N_DESS_AFF} plus grosses lignes sont listées sur "'
+                   f'&{DS["nbLignes"]}&".",IF(AND({DS["nom"]}<>"",{DS["nbLignes"]}=0),"Aucune affaire affectée à '
+                   f'cette ressource dans le périmètre.",""))', font(9, True, "B45309"))
 
 # ---- occupation de l'équipe
 section(68, "OCCUPATION DE L'ÉQUIPE (charge fixe + projets, en % de la capacité)")
