@@ -11,12 +11,10 @@ End Sub
 ' Le classeur est enregistré avec toutes les lignes visibles : ouvert un jour sans macros, il ne
 ' cache aucune ligne remplie. Les lignes vides sont masquées de nouveau juste après.
 Private Sub Workbook_BeforeSave(ByVal SaveAsUI As Boolean, Cancel As Boolean)
-    AjusterLignes "Dashboard", True
-    AjusterLignes "Dessinateurs", True
+    PreparerEnregistrement
 End Sub
 
 Private Sub Workbook_AfterSave(ByVal Success As Boolean)
-    AjusterLignes "Dashboard"
-    AjusterLignes "Dessinateurs"
+    TerminerEnregistrement
     If Success Then Me.Saved = True   ' le masquage ne compte pas comme une modification à enregistrer
 End Sub

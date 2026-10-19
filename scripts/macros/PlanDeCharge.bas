@@ -8,7 +8,7 @@ Option Explicit
 '   lignes_masquables_Dashboard, lignes_masquables_Dessinateurs : cellules repères ; leur ligne est
 '       masquée quand elles sont vides (lignes inutilisées des listes, aide masquée, alertes absentes)
 ' AjusterLignes est aussi appelée par les modules ThisWorkbook (ouverture, enregistrement) et des
-' deux feuilles (activation de l'onglet, modification d'un réglage de l'onglet).
+' deux feuilles (activation de l'onglet, modification d'un réglage, recalcul).
 
 Private Const TITRE_PDF As String = "Éditer PDF"
 Private Const TITRE_AIDE As String = "Afficher / masquer l'aide"
@@ -63,21 +63,59 @@ Erreur:
 End Sub
 
 ' Masque les lignes dont la cellule repère (nom lignes_masquables_<onglet>) est vide et réaffiche
-' les autres ; toutAfficher = True réaffiche tout (avant un enregistrement). Sans effet si le nom
-' est absent ; une feuille protégée laisse les lignes telles quelles.
+' les autres ; toutAfficher = True réaffiche tout (avant un enregistrement). En calcul manuel, le
+' classeur est d'abord recalculé pour ne jamais masquer une ligne d'après des valeurs périmées.
+' Sans effet si le nom est absent ; une feuille protégée reste telle quelle.
+' (Pas d'appel depuis Worksheet_Calculate : masquer des lignes relance un calcul, d'où des boucles.)
 Public Sub AjusterLignes(ByVal cle As String, Optional ByVal toutAfficher As Boolean = False)
     Dim zone As Range, bloc As Range, c As Range, vide As Boolean
+    Dim aMasquer As Range, aAfficher As Range
+
     On Error Resume Next
     Set zone = ThisWorkbook.Names("lignes_masquables_" & cle).RefersToRange
     If zone Is Nothing Then Exit Sub
+    If Not toutAfficher And Application.Calculation <> xlCalculationAutomatic Then Application.Calculate
     For Each bloc In zone.Areas
         For Each c In bloc.Cells
             vide = False
             If Not toutAfficher And Not IsError(c.Value) Then vide = (Len(CStr(c.Value)) = 0)
-            If c.EntireRow.Hidden <> vide Then c.EntireRow.Hidden = vide
+            If c.EntireRow.Hidden <> vide Then
+                If vide Then
+                    If aMasquer Is Nothing Then Set aMasquer = c Else Set aMasquer = Union(aMasquer, c)
+                Else
+                    If aAfficher Is Nothing Then Set aAfficher = c Else Set aAfficher = Union(aAfficher, c)
+                End If
+            End If
         Next c
     Next bloc
+    ' deux opérations groupées : chaque masquage relance un calcul du classeur
+    If Not aAfficher Is Nothing Then aAfficher.EntireRow.Hidden = False
+    If Not aMasquer Is Nothing Then aMasquer.EntireRow.Hidden = True
 End Sub
+
+' Avant un enregistrement (Workbook_BeforeSave) : toutes les lignes réaffichées, pour qu'un
+' classeur ouvert un jour sans macros ne cache aucune ligne remplie. Rien n'est fait avec
+' l'enregistrement automatique (OneDrive / SharePoint), qui enregistre toutes les quelques secondes.
+Public Sub PreparerEnregistrement()
+    If EnregistrementAutomatique() Then Exit Sub
+    AjusterLignes "Dashboard", True
+    AjusterLignes "Dessinateurs", True
+End Sub
+
+' Après l'enregistrement (Workbook_AfterSave) : lignes vides de nouveau masquées.
+Public Sub TerminerEnregistrement()
+    AjusterLignes "Dashboard"
+    AjusterLignes "Dessinateurs"
+End Sub
+
+' Enregistrement automatique actif ? (propriété absente des anciennes versions d'Excel : liaison
+' tardive, et Faux en cas d'erreur)
+Private Function EnregistrementAutomatique() As Boolean
+    Dim classeur As Object
+    Set classeur = ThisWorkbook
+    On Error Resume Next
+    EnregistrementAutomatique = classeur.AutoSaveOn
+End Function
 
 ' Exporte la zone d'impression de l'onglet en PDF, sans les textes d'aide ni les lignes vides,
 ' et inscrit la date du jour dans « Édité le ».
