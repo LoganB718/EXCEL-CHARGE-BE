@@ -77,7 +77,8 @@ def lit(text):
 
 
 def help_formula(toggle, content):
-    """Aide affichée seulement si la case « Afficher l'aide » de l'onglet (nom défini `toggle`) vaut Oui.
+    """Aide affichée seulement si l'état d'aide de l'onglet (nom défini `toggle` : case « Afficher l'aide » ou,
+    sur Dashboard et Dessinateurs, cellule de Calculs basculée par le bouton) vaut Oui.
     `content` : texte simple, ou formule commençant par « = »."""
     expr = content[1:] if content.startswith("=") else lit(content)
     return f'=IF({toggle}="Oui",{expr},"")'
@@ -414,9 +415,8 @@ NG = 59            # nombre de colonnes de la grille
 MARGIN_W = 2       # largeur des colonnes de marge A et BI (unité Excel) = 14 pixels
 MARGIN_H = 10.5    # hauteur des lignes de marge (points) = 14 pixels : mêmes marges en haut, en bas et sur les côtés
 LOGO = (51, 57)    # emplacement du logo de l'entreprise : cases fusionnées BA2:BG2
-# hors zone d'impression, à droite de la colonne BI : boutons des macros (placés par make_xlsm.py en BL2:BM4 et
-# BL6:BM7) et case « Afficher l'aide » (Oui / Non) qui reste utilisable si les macros sont désactivées
-BTN_AIDE_LABEL, BTN_AIDE_CELL = "BL8", "BM8"
+# boutons des macros : hors zone d'impression, à droite de la colonne BI (placés par build_xlsm.py en BL2:BM4 et
+# BL6:BM7) ; l'aide de ces onglets s'affiche ou se masque par le bouton (état dans Calculs, noms aide_...)
 
 
 def gc(i):
@@ -551,6 +551,10 @@ INDICATORS = [
     ("picPart", "Part du mois de pic dans la charge de la période", "=IF(AL15=0,0,AL17/AL15)", "0%"),
     ("periodeTxt", "Période affichée (bandeau des onglets Dashboard et Dessinateurs)",
      f'="Période "&{mois_fr("AL14")}&" "&YEAR(AL14)&" – "&{mois_fr("AL25")}&" "&YEAR(AL25)', "General"),
+    ("aideDashboard", "Aide affichée sur le Dashboard (Oui / Non, bouton « Afficher / masquer l'aide »)", "Oui",
+     "General"),
+    ("aideDessinateurs", "Aide affichée sur Dessinateurs (Oui / Non, bouton « Afficher / masquer l'aide »)", "Oui",
+     "General"),
 ]
 ws["AK3"], ws["AL3"] = "Indicateur", "Valeur"
 for c in ("AK3", "AL3"):
@@ -569,6 +573,12 @@ expected = {"total": 4, "nbAff": 5, "nbProj": 7, "realise": 9, "autoStart": 13, 
             "periode": 15, "pic": 17, "picIdx": 18}
 for k, row in expected.items():
     assert K[k] == f"Calculs!$AL${row}", (k, K[k])
+for sheet_title in ("Dashboard", "Dessinateurs"):
+    ref = K["aide" + sheet_title]
+    wb.defined_names["aide_" + sheet_title] = DefinedName("aide_" + sheet_title, attr_text=ref)
+    v = DataValidation(type="list", formula1=HELP_CHOICES, allow_blank=False)
+    v.add(ref.split("!")[1].replace("$", ""))
+    ws.add_data_validation(v)
 
 # Charge par mois (AN..AQ)
 for c, t in zip(("AN", "AO", "AP", "AQ"), ("N° mois", "Mois", "Charge (h)", "Affaires actives")):
@@ -999,11 +1009,12 @@ def banner(title, subtitle, edite_name):
     put(4, 30, LOGO[1], f"={K['periodeTxt']}", font(10, True, WHITE), h="right", bg=NAVY)
 
 
-def pdf_rows(sheet_title, *areas):
-    """Nom pdf_lignes_<onglet> : cellules dont la ligne est masquée par la macro « Éditer PDF » si elles
-    sont vides (lignes inutilisées des listes, aide masquée, alertes absentes) : pas de pages blanches."""
+def auto_hide_rows(sheet_title, *areas):
+    """Nom lignes_masquables_<onglet> : cellules repères dont la ligne est masquée par les macros quand elles
+    sont vides (lignes inutilisées des listes, aide masquée, alertes absentes), à l'écran comme dans le PDF."""
     ref = ",".join(f"{sheet_title}!{a}" for a in areas)
-    wb.defined_names[f"pdf_lignes_{sheet_title}"] = DefinedName(f"pdf_lignes_{sheet_title}", attr_text=ref)
+    name = f"lignes_masquables_{sheet_title}"
+    wb.defined_names[name] = DefinedName(name, attr_text=ref)
 
 
 # Bandeau titre
@@ -1409,11 +1420,9 @@ NOTES = [
 for i, t in enumerate(NOTES):
     put(NOTE_R + 1 + i, 0, NG - 1, help_formula("aide_Dashboard", t), font(8, color=GREY, italic=True))
 
-# case « Afficher l'aide » à droite de la page, hors de la zone imprimée, sous les boutons des macros
-help_switch(ws, BTN_AIDE_LABEL, BTN_AIDE_CELL, "aide_Dashboard")
 ws.print_area = f"A1:{L(gc(NG))}{LAST_ROW}"
-pdf_rows("Dashboard", f"${gl(0)}${TABLE_R1}:${gl(0)}${TABLE_R2}",
-         f"${gl(0)}${NOTE_R}:${gl(0)}${NOTE_R + len(NOTES)}")
+auto_hide_rows("Dashboard", f"${gl(0)}${TABLE_R1}:${gl(0)}${TABLE_R2}",
+               f"${gl(0)}${NOTE_R}:${gl(0)}${NOTE_R + len(NOTES)}")
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90
@@ -1735,11 +1744,9 @@ for i, t in enumerate(D_NOTES):
     put(93 + i, 0, NG - 1, help_formula("aide_Dessinateurs", t) if i < 2 else t,
         font(8, color=GREY if i < 2 else "B45309", italic=i < 2, bold=i >= 2))
 
-# case « Afficher l'aide » à droite de la page, hors de la zone imprimée, sous les boutons des macros
-help_switch(ws, BTN_AIDE_LABEL, BTN_AIDE_CELL, "aide_Dessinateurs")
 ws.print_area = f"A1:{L(gc(NG))}{D_LAST}"
-pdf_rows("Dessinateurs", f"${gl(0)}$51:${gl(0)}$66", f"${gl(1)}$73:${gl(1)}${72 + N_DESS}",
-         f"${gl(0)}$93:${gl(0)}${92 + len(D_NOTES)}")
+auto_hide_rows("Dessinateurs", f"${gl(0)}$51:${gl(0)}$66", f"${gl(1)}$73:${gl(1)}${72 + N_DESS}",
+               f"${gl(0)}$93:${gl(0)}${92 + len(D_NOTES)}")
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90

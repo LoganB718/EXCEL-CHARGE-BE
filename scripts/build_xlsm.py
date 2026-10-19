@@ -95,11 +95,22 @@ STYLE_BOUTON = {"fill": "1F2A44", "font_color": "FFFFFF", "bold": True, "font_si
                 "font_name": "Arial"}          # police du classeur
 MARGE_PX = 3          # marge intérieure entre le bouton et les bords des cellules
 
+# Code des modules de document (événements : ouverture, activation d'un onglet, modification),
+# fichiers du dossier macros/ ; les autres modules de document restent vides.
+DOCUMENTS_CODE = {
+    "ThisWorkbook": "ThisWorkbook.vba",
+    "shDashboard": "shDashboard.vba",
+    "shDessinateurs": "shDessinateurs.vba",
+}
+
 # Noms définis lus par le module (cellule unique de l'onglet indiqué).
 NOMS_REQUIS = {
-    "aide_Dashboard": "Dashboard", "edite_Dashboard": "Dashboard",
-    "aide_Dessinateurs": "Dessinateurs", "edite_Dessinateurs": "Dessinateurs",
+    "aide_Dashboard": "Calculs", "edite_Dashboard": "Dashboard",
+    "aide_Dessinateurs": "Calculs", "edite_Dessinateurs": "Dessinateurs",
 }
+# Noms définis lus par AjusterLignes (plages, éventuellement en plusieurs morceaux, de l'onglet).
+PLAGES_REQUISES = {"lignes_masquables_Dashboard": "Dashboard",
+                   "lignes_masquables_Dessinateurs": "Dessinateurs"}
 
 NS_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
@@ -278,6 +289,14 @@ def controler_classeur(xlsx):
         elif not re.match(motif, cible):
             problemes.append("nom défini %s = %s : une cellule de l'onglet %s est attendue"
                              % (nom, cible, onglet))
+    for nom, onglet in PLAGES_REQUISES.items():
+        cible = globaux.get(nom)
+        morceau = r"'?%s'?!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?" % re.escape(onglet)
+        if cible is None:
+            problemes.append("nom défini %s absent (utilisé par AjusterLignes)" % nom)
+        elif not re.match(r"^%s(?:,%s)*$" % (morceau, morceau), cible):
+            problemes.append("nom défini %s = %s : des plages de l'onglet %s sont attendues"
+                             % (nom, cible, onglet))
     for onglet in ONGLETS_BOUTONS:
         zone = zones.get(onglet)
         if zone is None:
@@ -313,13 +332,21 @@ def construire(xlsx=XLSX_DEFAUT, bas=BAS_DEFAUT, sortie=SORTIE_DEFAUT, copie_bin
     nom, texte = lire_bas(bas)
     macros = ["%s_%s" % (o, s) for o in ONGLETS_BOUTONS for _, _, s in BOUTONS]
     problemes = controler_module(nom, texte, macros) + controler_classeur(xlsx)
+    codes = {}
+    for module, fichier in DOCUMENTS_CODE.items():
+        with open(os.path.join(os.path.dirname(os.path.abspath(bas)), fichier), encoding="utf-8-sig") as f:
+            codes[module] = f.read()
+        for numero, ident, nature in identifiants_declares(codes[module]):
+            if ident.lower() in RESERVES_VBA:
+                problemes.append("%s, ligne %d : %s « %s » = identifiant réservé de VBA"
+                                 % (fichier, numero, nature, ident))
     if problemes and not forcer:
         raise ErreurControle("contrôles en échec :\n  - " + "\n  - ".join(problemes)
                              + "\n(--forcer pour construire malgré tout)")
 
     # 1. Projet VBA : modules de document dans l'ordre des onglets, puis le module standard.
-    documents = [(CODENAMES["__workbook__"], "workbook")]
-    documents += [(code, "worksheet") for titre, code in CODENAMES.items()
+    documents = [(CODENAMES["__workbook__"], "workbook", codes.get(CODENAMES["__workbook__"]))]
+    documents += [(code, "worksheet", codes.get(code)) for titre, code in CODENAMES.items()
                   if titre != "__workbook__"]
     vba_bin = build_vba_project_bin({nom: texte}, documents)
     if copie_bin:
