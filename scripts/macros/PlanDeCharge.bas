@@ -8,6 +8,7 @@ Option Explicit
 '   lignes_masquables_<onglet>_1, _2... : cellules repères (une zone par nom) ; leur ligne est
 '       masquée quand elles sont vides (lignes inutilisées des listes, aide masquée, alertes absentes)
 '   macros_actives                : Oui quand les macros tournent (le voyant rouge des onglets disparaît)
+'   lignes_pdf_<onglet>           : lignes non imprimées dans le PDF (barre de réglages du Dashboard)
 ' Les modules ThisWorkbook (ouverture, enregistrement) et des feuilles Dashboard et Dessinateurs
 ' (activation de l'onglet, modification d'un réglage) appellent MacrosActives, AjusterLignes, etc.
 
@@ -148,10 +149,16 @@ Private Function EnregistrementAutomatique() As Boolean
     EnregistrementAutomatique = classeur.AutoSaveOn
 End Function
 
+' Plage désignée par un nom défini, ou Nothing si le nom est absent (sans message).
+Private Function PlageFacultative(ByVal nom As String) As Range
+    On Error Resume Next
+    Set PlageFacultative = ThisWorkbook.Names(nom).RefersToRange
+End Function
+
 ' Exporte la zone d'impression de l'onglet en PDF, sans les textes d'aide ni les lignes vides,
 ' et inscrit la date du jour dans « Édité le ».
 Private Sub EditerPDF(ByVal cle As String)
-    Dim ws As Worksheet, cAide As Range, cEdite As Range
+    Dim ws As Worksheet, cAide As Range, cEdite As Range, horsPDF As Range
     Dim ancienneAide As Variant, ancienneDate As Variant, fichier As Variant
     Dim nomDefaut As String, dossier As String, message As String
 
@@ -160,6 +167,7 @@ Private Sub EditerPDF(ByVal cle As String)
     Set cAide = CelluleNommee("aide_" & cle, TITRE_PDF)
     If cAide Is Nothing Then Exit Sub
     Set ws = cEdite.Worksheet
+    Set horsPDF = PlageFacultative("lignes_pdf_" & cle)
 
     ' Dossier proposé : celui du classeur s'il est enregistré sur un disque (local ou réseau).
     ' Classeur jamais enregistré : Path = "" ; ouvert depuis OneDrive / SharePoint : Path est
@@ -183,9 +191,11 @@ Private Sub EditerPDF(ByVal cle As String)
     cEdite.Value = Date        ' « Édité le » = date de l'édition du PDF
     Application.Calculate
     AjusterLignes cle          ' pas de lignes vides (ni d'aide) dans le PDF
+    If Not horsPDF Is Nothing Then horsPDF.EntireRow.Hidden = True
     ws.Select                  ' seulement cet onglet, même si des onglets étaient groupés
     ws.ExportAsFixedFormat Type:=xlTypePDF, Filename:=fichier, Quality:=xlQualityStandard, _
                            IncludeDocProperties:=False, IgnorePrintAreas:=False, OpenAfterPublish:=True
+    If Not horsPDF Is Nothing Then horsPDF.EntireRow.Hidden = False
     cAide.Value = ancienneAide
     If Application.Calculation <> xlCalculationAutomatic Then Application.Calculate
     AjusterLignes cle
@@ -198,6 +208,7 @@ Erreur:
 
 Restaurer:
     On Error Resume Next       ' une restauration impossible ne doit pas lever une 2e erreur
+    If Not horsPDF Is Nothing Then horsPDF.EntireRow.Hidden = False
     cAide.Value = ancienneAide
     cEdite.Value = ancienneDate
     If Application.Calculation <> xlCalculationAutomatic Then Application.Calculate

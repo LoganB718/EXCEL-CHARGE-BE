@@ -526,7 +526,8 @@ INDICATORS = [
     ("reste", "Reste à faire (h)", "=AL4-AL9", "#,##0.0"),
     ("avgSimple", "Avancement moyen (moyenne simple des affaires)",
      f"=IF(AL5=0,0,SUM(EU{R1}:EU{R2})/AL5)", "0.0%"),
-    ("avgPond", "Avancement moyen pondéré par la charge", "=IF(AL4=0,0,AL9/AL4)", "0.0%"),
+    ("avgPond", "Avancement moyen pondéré par les heures (toutes les lignes des affaires du périmètre)",
+     f"=IF(SUM(FH{R1}:FH{R2})=0,0,SUM(FI{R1}:FI{R2})/SUM(FH{R1}:FH{R2}))", "0.0%"),
     ("autoStart", "1er mois automatique (1er début planifié)",
      f"=IF(COUNT(I{R1}:I{R2})=0,DATE(YEAR(TODAY()),MONTH(TODAY()),1),"
      f"DATE(YEAR(MIN(I{R1}:I{R2})),MONTH(MIN(I{R1}:I{R2})),1))", "MMM YYYY"),
@@ -542,7 +543,8 @@ INDICATORS = [
      "=IF(N(p_HeuresETP)-N(p_ChargeFixe)<=0,0,AL17/(p_HeuresETP-p_ChargeFixe))", "0.0"),
     ("totalETP", "Charge totale en ETP-mois", "=IF(N(p_HeuresETP)-N(p_ChargeFixe)<=0,0,AL4/(p_HeuresETP-p_ChargeFixe))",
      "0.0"),
-    ("bigIdx", "Position de la plus grosse affaire", "=BX4", "0"),
+    ("bigIdx", "Position de l'affaire au plus gros reste à faire",
+     f'=IFERROR(MATCH(MAX(FJ{R1}:FJ{R2}),FJ{R1}:FJ{R2},0),"")', "0"),
     ("nbTermines", "Lignes terminées (avancement 100 %)", f"=COUNTIFS(B{R1}:B{R2},1,C{R1}:C{R2},\">=1\")", "0"),
     ("finPeriode", "Dernier mois affiché", f"=EDATE(AL14,{N_MONTHS - 1})", "MMM YYYY"),
     ("picPart", "Part du mois de pic dans la charge de la période", "=IF(AL15=0,0,AL17/AL15)", "0%"),
@@ -556,6 +558,25 @@ INDICATORS = [
     ("aideData", "Aide affichée sur Data (Oui / Non, bouton « Afficher / masquer l'aide »)", "Oui", "General"),
     ("macrosActives", "Macros actives (Oui écrit à l'ouverture par la macro ; Non dans le fichier enregistré)", "Non",
      "General"),
+]
+_n = len(INDICATORS)
+_cap, _sur = 4 + _n, 5 + _n
+INDICATORS += [
+    ("capEquipe", "Capacité projets de l'équipe (h/mois) : somme des (capacité - charge fixe) des ressources Data",
+     f"=SUM(FM4:FM{3 + 2 * (DATA_LAST - 3)})", "#,##0"),
+    ("nbSurcharge", "Mois où la charge dépasse la capacité projets de l'équipe",
+     f"=IF(AL{_cap}<=0,0,SUMPRODUCT(--(ROUND(AP4:AP{3 + N_MONTHS},0)>ROUND(AL{_cap},0))))", "0"),
+    ("premSurcharge", "Premier mois en surcharge",
+     f'=IF(AL{_sur}=0,"",INDEX(AO4:AO{3 + N_MONTHS},MATCH(1,INDEX(--(ROUND(AP4:AP{3 + N_MONTHS},0)>'
+     f'ROUND(AL{_cap},0)),0),0)))', "MMM YYYY"),
+    ("picCap", "Pic de charge rapporté à la capacité de l'équipe", f"=IF(AL{_cap}<=0,0,AL17/AL{_cap})", "0%"),
+    ("nbRetard", "Affaires en retard", f'=COUNTIF(FL{R1}:FL{R2},">0")', "0"),
+    ("nbDepasse", "dont date de besoin dépassée sans être à 100 %", f"=COUNTIF(FL{R1}:FL{R2},2)", "0"),
+    ("nbEcart", "dont avancement inférieur de plus de 15 points à l'attendu", f"=COUNTIF(FL{R1}:FL{R2},1)", "0"),
+    ("reglagesTxt", "Rappel des réglages (bandeau du Dashboard)",
+     f'=p_Perimetre&"  ·  "&IF(p_Repartition="{REP_SMOOTH}","charge lissée en jours ouvrés jusqu\'à la date de '
+     f'besoin","charge sur le mois de début planifié")&"  ·  "&p_HeuresETP&" h par personne dont "&p_ChargeFixe'
+     f'&" h hors projet"', "General"),
 ]
 ws["AK3"], ws["AL3"] = "Indicateur", "Valeur"
 for c in ("AK3", "AL3"):
@@ -631,6 +652,11 @@ ws[f"AU{TOT_ROW}"] = f"=SUM(AU{SLOT_R1}:AU{SLOT_R2})"
 for c in SM:
     ws[f"{c}{TOT_ROW}"] = f"=ROUND(SUM({c}{SLOT_R1}:{c}{SLOT_R2}),0)"
     ws[f"{c}{TOT_ROW}"].number_format = "#,##0"
+CAP_ROW = TOT_ROW + 1   # capacité projets de l'équipe (ligne pointillée du graphique)
+ws[f"AT{CAP_ROW}"] = "Capacité projets de l'équipe"
+for c in SM:
+    ws[f"{c}{CAP_ROW}"] = f"={K['capEquipe'].split('!')[1]}"
+    ws[f"{c}{CAP_ROW}"].number_format = "#,##0"
 
 
 def top_list(c_k, c_name, c_h, n, count_ref, key_col, tot_col, rank_col, other_label, title):
@@ -660,7 +686,7 @@ top_list("BO", "BP", "BQ", 8, "$AL$7", "G", "Q", "R", "autres projets", "Projet"
 top_list("BS", "BT", "BU", 4, "$AL$8", "H", "T", "U", "autres types", "Type")
 
 # Tableau des affaires : position (dans Charge) de l'affaire de rang k
-for c, t in zip(("BW", "BX"), ("Rang", "Position dans Charge")):
+for c, t in zip(("BW", "BX", "BY"), ("Rang", "Position dans Charge", "Retard (2 date dépassée, 1 écart)")):
     ws[f"{c}3"] = t
     ws[f"{c}3"].font = hdr_font
     ws[f"{c}3"].fill = fill(NAVY)
@@ -668,6 +694,7 @@ for k in range(1, N_TABLE + 1):
     r = 3 + k
     ws[f"BW{r}"] = k
     ws[f"BX{r}"] = f'=IFERROR(MATCH(BW{r},$EQ${R1}:$EQ${R2},0),"")'
+    ws[f"BY{r}"] = f'=IF(BX{r}="","",INDEX($FL${R1}:$FL${R2},BX{r}))'
 
 # ---- Affaires = sous-projets regroupés (projet + sous-projet + produit), toutes ressources confondues
 AFF_COLS = [("FD", "Ligne avec dessinateur ET externe (1 = à corriger)"),
@@ -677,7 +704,11 @@ AFF_COLS = [("FD", "Ligne avec dessinateur ET externe (1 = à corriger)"),
             ("ET", "Ressources (texte)"),
             ("EU", "Avancement de l'affaire (pondéré par les heures)"), ("EV", "Début de la ligne (31/12/9999 = vide)"),
             ("EW", "Début de l'affaire (le plus tôt)"), ("EX", "Besoin de la ligne (0 = vide)"),
-            ("EY", "Besoin de l'affaire (le plus tard)")]
+            ("EY", "Besoin de l'affaire (le plus tard)"),
+            ("FF", "Clé affaire, toutes lignes valides (périmètre ignoré)"), ("FG", "Heures de la ligne (périmètre ignoré)"),
+            ("FH", "Heures de l'affaire (toutes ses lignes)"), ("FI", "Heures réalisées de l'affaire (selon avancement)"),
+            ("FJ", "Reste à faire de l'affaire (h)"), ("FK", "Avancement attendu (prorata des jours ouvrés écoulés)"),
+            ("FL", "Retard : 2 = besoin dépassé, 1 = écart > 15 pts, 0 = à l'heure")]
 for c, t in AFF_COLS:
     ws[f"{c}3"] = t
     ws[f"{c}3"].font = hdr_font
@@ -685,7 +716,7 @@ for c, t in AFF_COLS:
     ws[f"{c}3"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
     ws.column_dimensions[c].width = 13
 ws.column_dimensions["EN"].width = 30
-A_RNG = {c: f"${c}${R1}:${c}${R2}" for c in ("C", "E", "EM", "EN", "EO", "EP", "EV", "EX")}
+A_RNG = {c: f"${c}${R1}:${c}${R2}" for c in ("C", "E", "EM", "EN", "EO", "EP", "EV", "EX", "FF", "FG")}
 for r in range(R1, R2 + 1):
     ws[f"EM{r}"] = (f'=IF(D{r}=1,IF(TRIM(Charge!K{r})<>"","Interne",IF(TRIM(Charge!L{r})<>"","Externe",'
                     f'"Non affecté")),"")')
@@ -704,13 +735,28 @@ for r in range(R1, R2 + 1):
     ws[f"ET{r}"] = (f'=IF(EO{r}=1,IF(ER{r}+ES{r}=0,"à affecter",IF(ER{r}=0,ES{r}&" ext.",'
                     f'(ER{r}+ES{r})&IF(ES{r}>0," dont "&ES{r}&" ext.",""))'
                     f'&IF(COUNTIFS({A_RNG["EN"]},EN{r},{A_RNG["EM"]},"Non affecté")>0," + à affecter","")),"")')
-    ws[f"EU{r}"] = (f'=IF(EO{r}=1,IF(EP{r}>0,SUMPRODUCT(({A_RNG["EN"]}=EN{r})*{A_RNG["E"]}*{A_RNG["C"]})/EP{r},'
-                    f'AVERAGEIF({A_RNG["EN"]},EN{r},{A_RNG["C"]})),"")')
+    # avancement, réalisé et reste à faire de l'affaire : TOUTES ses lignes, même celles hors périmètre (terminées)
+    ws[f"FF{r}"] = (f'=IF(B{r}=1,LEFT(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({part("B")}&" | "&{part("C")}&" | "&{part("D")},'
+                    f'"~","-"),"*","+"),"?","!"),240),"")')
+    ws[f"FG{r}"] = f"=IF(B{r}=1,MAX(0,N(Charge!M{r})),0)"
+    ws[f"FH{r}"] = f'=IF(EO{r}=1,ROUND(SUMIF({A_RNG["FF"]},EN{r},{A_RNG["FG"]}),2),"")'
+    ws[f"FI{r}"] = f'=IF(EO{r}=1,SUMPRODUCT(({A_RNG["FF"]}=EN{r})*{A_RNG["FG"]}*{A_RNG["C"]}),"")'
+    ws[f"FJ{r}"] = f'=IF(EO{r}=1,MAX(0,ROUND(FH{r}-FI{r},2)),"")'
+    ws[f"EU{r}"] = (f'=IF(EO{r}=1,IF(FH{r}>0,FI{r}/FH{r},AVERAGEIF({A_RNG["FF"]},EN{r},{A_RNG["C"]})),"")')
     ws[f"EV{r}"] = f"=IF(ISNUMBER(I{r}),I{r},2958465)"
     ws[f"EW{r}"] = (f'=IF(EO{r}=1,SUMPRODUCT(MIN(({A_RNG["EN"]}=EN{r})*{A_RNG["EV"]}'
                     f'+({A_RNG["EN"]}<>EN{r})*2958465)),"")')
     ws[f"EX{r}"] = f"=IF(AND(D{r}=1,ISNUMBER(Charge!F{r})),Charge!F{r},0)"
     ws[f"EY{r}"] = f'=IF(EO{r}=1,SUMPRODUCT(MAX(({A_RNG["EN"]}=EN{r})*{A_RNG["EX"]})),"")'
+    # retard : besoin dépassé sans être à 100 %, ou avancement < avancement attendu - 15 points
+    ws[f"FK{r}"] = (f'=IF(EO{r}=1,IF(OR(EW{r}>=2958465,EY{r}=0,EY{r}<=EW{r}),"",IF(TODAY()<=EW{r},0,'
+                    f'IF(TODAY()>=EY{r},1,IFERROR(NETWORKDAYS(EW{r},TODAY(),{HOLIDAYS})'
+                    f'/NETWORKDAYS(EW{r},EY{r},{HOLIDAYS}),"")))),"")')
+    ws[f"FL{r}"] = (f'=IF(EO{r}=1,IF(AND(EY{r}>0,EY{r}<TODAY(),ROUND(EU{r},4)<1),2,'
+                    f'IF(FK{r}="",0,IF(ROUND(EU{r}-FK{r},4)<-0.15,1,0))),"")')
+    for c in ("FH", "FI", "FJ"):
+        ws[f"{c}{r}"].number_format = "0.0"
+    ws[f"FK{r}"].number_format = "0%"
     ws[f"EP{r}"].number_format = "0.0"
     ws[f"EU{r}"].number_format = "0%"
     for c in ("EV", "EW", "EX", "EY"):
@@ -750,11 +796,18 @@ DATA_EXT = f"$EK$4:$EK${DATA_LAST}"
 N_RES = 2 * (DATA_LAST - 3)   # capacité de la liste commune (dessinateurs puis externes)
 hdr("FA", "Ressources : dessinateurs puis externes (liste déroulante)", 22)
 hdr("FB", "Type", 10)
+hdr("FM", "Capacité projets (capacité - charge fixe, h/mois)", 14)
 for k in range(1, N_RES + 1):
     r = 3 + k
     ws[f"FA{r}"] = (f'=IF({k}<=$CD$23,INDEX({DATA_NAMES},{k}),IF({k}-$CD$23<=$CD$26,'
                     f'INDEX({DATA_EXT},{k}-$CD$23),""))')
     ws[f"FB{r}"] = f'=IF(FA{r}="","",IF({k}<=$CD$23,"Interne","Externe"))'
+    dup_fa = f"COUNTIF($FA$4:FA{r - 1},FA{r})>0" if r > 4 else "FALSE"
+    v = {}
+    for key, d_int, d_ext, dflt in (("cap", "F", "I", "p_HeuresETP"), ("fixe", "G", "J", "p_ChargeFixe")):
+        vi, ve = f"INDEX(Data!${d_int}:${d_int},{k + 3})", f"INDEX(Data!${d_ext}:${d_ext},{k + 3}-$CD$23)"
+        v[key] = (f'IF(FB{r}="Interne",IF(ISNUMBER({vi}),{vi},{dflt}),IF(ISNUMBER({ve}),{ve},{dflt}))')
+    ws[f"FM{r}"] = f'=IF(OR(FA{r}="",{dup_fa}),0,MAX(0,{v["cap"]}-{v["fixe"]}))'
 wb.defined_names["lst_Ressources"] = DefinedName(
     "lst_Ressources", attr_text="OFFSET(Calculs!$FA$4,0,0,MAX(1,Calculs!$CD$23+Calculs!$CD$26),1)")
 
@@ -997,7 +1050,7 @@ def section(r, text):
     c.alignment = Alignment(vertical="bottom")
 
 
-def banner(title, subtitle, edite_name):
+def banner(title, subtitle, edite_name, left4=None):
     """Bandeau des lignes 2 à 4 : titre, logo (BA2:BG2), « Édité le » et période affichée.
     « Édité le » est une date fixe, écrite par la macro « Éditer PDF » (nom défini `edite_name`)."""
     for r in (2, 3, 4):
@@ -1009,6 +1062,8 @@ def banner(title, subtitle, edite_name):
     put(3, 44, LOGO[1], None, font(10, color="C9D3E3"), h="right", fmt='"Édité le "DD/MM/YYYY', bg=NAVY)
     wb.defined_names[edite_name] = DefinedName(edite_name, attr_text=f"{ws.title}!${gl(44)}$3")
     put(4, 30, LOGO[1], f"={K['periodeTxt']}", font(10, True, WHITE), h="right", bg=NAVY)
+    if left4:
+        put(4, 1, 28, left4, font(9, color="C9D3E3"), bg=NAVY, shrink=True)
 
 
 def auto_hide_rows(sheet_title, *areas):
@@ -1023,7 +1078,9 @@ def auto_hide_rows(sheet_title, *areas):
 # Bandeau titre
 banner("TABLEAU DE BORD — PLAN DE CHARGE DU BUREAU D'ÉTUDES",
        "Synthèse automatique de l'onglet Charge : mettre à jour Charge et Data, le tableau de bord se recalcule seul.",
-       "edite_Dashboard")
+       "edite_Dashboard", left4=f"={K['reglagesTxt']}")
+# la barre de réglages (lignes 5 à 7) n'est pas imprimée par « Éditer PDF » : rappel des réglages en ligne 4
+wb.defined_names["lignes_pdf_Dashboard"] = DefinedName("lignes_pdf_Dashboard", attr_text="Dashboard!$A$5:$A$7")
 
 # Barre de paramètres
 box(P_ROW, P_ROW + 1, 0, NG - 1)
@@ -1141,11 +1198,11 @@ c1, c2 = CARDS[3]
 IDX = K["bigIdx"]
 pop_lab = font(8.5, color="AEB9CC")
 pop_val = font(9.5, True, WHITE)
-put(11, c1 + 1, c2 - 1, "★  PLUS GROSSE AFFAIRE", font(9, True, AMBER), bg=NAVY)
-put(12, c1 + 1, c2 - 1, f'=IF({IDX}="",0,INDEX(Calculs!$EP${R1}:$EP${R2},{IDX}))', font(24, True, WHITE),
+put(11, c1 + 1, c2 - 1, "★  PLUS GROS RESTE À FAIRE", font(9, True, AMBER), bg=NAVY)
+put(12, c1 + 1, c2 - 1, f'=IF({IDX}="",0,INDEX(Calculs!$FJ${R1}:$FJ${R2},{IDX}))', font(24, True, WHITE),
     fmt=H_FMT, bg=NAVY)
-put(13, c1 + 1, c2 - 1, f'=IF(OR({IDX}="",{K["total"]}=0),0,INDEX(Calculs!$EP${R1}:$EP${R2},{IDX})/{K["total"]})',
-    font(8.5, color="C9D3E3"), fmt='"soit "0%" de la charge identifiée"', bg=NAVY)
+put(13, c1 + 1, c2 - 1, f'=IF({IDX}="",0,INDEX(Calculs!$FH${R1}:$FH${R2},{IDX}))',
+    font(8.5, color="C9D3E3"), fmt='"sur "#,##0" h au total pour cette affaire"', bg=NAVY)
 for i in range(c1 + 1, c2):
     ws.cell(14, gc(i)).border = Border(bottom=side("3B4A6B"))
 POP = [  # (libellé, colonne source, onglet source, type) — affaire = sous-projet regroupé
@@ -1175,22 +1232,23 @@ TILES = [(i * 12, i * 12 + 10) for i in range(5)]
 kpi_val = font(22, True, NAVY)
 kpi_month = font(16, True, NAVY)
 KPIS = [
-    ("CHARGE TOTALE IDENTIFIÉE", f"={K['total']}", H_FMT,
-     (f"={K['reste']}", '"Reste à faire : "#,##0" h"'),
-     (f"={K['nbAff']}", '"sur "0" affaires"')),
+    ("MOIS EN SURCHARGE", f"={K['nbSurcharge']}", '0" mois"',
+     (f"={K['capEquipe']}", '"Capacité projets : "#,##0" h/mois"'),
+     (f'=IF({K["nbSurcharge"]}>0,{K["premSurcharge"]},{K["picCap"]})',
+      '[>2]"Dès "MMMM YYYY;"Pic à "0%" de la capacité"')),
     ("PIC DE CHARGE", f"={K['pic']}", H_FMT,
      (f"={K['picMois']}", '"en "MMMM YYYY'),
-     (f"={K['picETP']}", '"≈ "0.0" ETP sur le mois"')),
-    ("MOIS LE PLUS CHARGÉ", f'=IF({K["pic"]}=0,"—",{K["picMois"]})', "MMMM YYYY",
-     (f"={K['picActives']}", '0" affaire(s) active(s) ce mois-ci"'),
-     (f"={K['picPart']}", '0%" de la charge sur 12 mois"')),
+     (f'={K["picActives"]}&" affaire(s) active(s)  ·  ≈ "&ROUND({K["picETP"]},1)&" ETP"', None)),
+    ("AFFAIRES EN RETARD", f"={K['nbRetard']}", "0",
+     (f"={K['nbDepasse']}", '"dont "0" date de besoin dépassée"'),
+     (f"={K['nbEcart']}", '0" en retard de plus de 15 pts"')),
     ("NOMBRE D'AFFAIRES", f"={K['nbAff']}", "0",
      (f"={K['nbProj']}", '"réparties sur "0" projet(s)"'),
      (f'=IF(p_Perimetre="{PERIM_ALL}","dont "&{K["nbTermines"]}&" ligne(s) terminée(s)",'
       f'{K["nbTermines"]}&" ligne(s) terminée(s) non comptée(s)")', None)),
-    ("TAUX D'AVANCEMENT MOYEN", f"={K['avgSimple']}", "0%",
-     (f"={K['avgPond']}", '"Pondéré par la charge : "0%'),
-     ("moyenne simple par affaire", None)),
+    ("TAUX D'AVANCEMENT MOYEN", f"={K['avgPond']}", "0%",
+     ("pondéré par les heures des affaires", None),
+     (f"={K['avgSimple']}", '"Moyenne simple par affaire : "0%')),
 ]
 for (c1, c2), (title, formula, fmt, s1, s2) in zip(TILES, KPIS):
     box(27, 32, c1, c2, top=side(ACCENT, "thick"))
@@ -1198,6 +1256,11 @@ for (c1, c2), (title, formula, fmt, s1, s2) in zip(TILES, KPIS):
     put(29, c1 + 1, c2 - 1, formula, kpi_month if "MMMM" in fmt else kpi_val, fmt=fmt, shrink=True)
     put(30, c1 + 1, c2 - 1, s1[0], sub_f, fmt=s1[1], shrink=True)
     put(31, c1 + 1, c2 - 1, s2[0], sub_f, fmt=s2[1], shrink=True)
+# surcharge de l'équipe et affaires en retard : valeur en rouge dès qu'il y en a
+for (c1, c2) in (TILES[0], TILES[2]):
+    absref = f"${gl(c1 + 1)}$29"
+    ws.conditional_formatting.add(f"{gl(c1 + 1)}29", FormulaRule(formula=[f"AND(ISNUMBER({absref}),{absref}>0)"],
+                                                              font=Font(color=RED_T, bold=True)))
 
 # ---- Section 3 : graphiques
 section(34, "RÉPARTITION DE LA CHARGE")
@@ -1205,7 +1268,12 @@ LP = (0, 30)
 RP = (32, 58)
 box(36, 55, *LP)
 box(36, 55, *RP)
-put(37, LP[0] + 1, LP[1] - 1, "CHARGE EN HEURES PAR MOIS ET PAR PROJET", title_f)
+put(37, LP[0] + 1, LP[0] + 16, "CHARGE EN HEURES PAR MOIS ET PAR PROJET", title_f)
+CAP_LINE_C = "1F2937"
+for i in (LP[0] + 17, LP[0] + 18):
+    ws.cell(37, gc(i)).border = Border(bottom=Side(style="mediumDashed", color=CAP_LINE_C))
+put(37, LP[0] + 19, LP[1] - 1, f"={K['capEquipe']}", font(8.5, color=INK), h="right",
+    fmt='"Capacité projets de l\'équipe : "#,##0" h/mois"', shrink=True)
 put(38, LP[0] + 1, LP[0] + 14, f"={K['start']}", sub_f, fmt='"12 mois à partir de "MMMM YYYY')
 put(38, LP[0] + 15, LP[1] - 1, f"={K['hors']}", sub_f, h="right",
     fmt='"Hors période ou sans date de début : "#,##0" h";;"Toute la charge est visible sur la période"')
@@ -1285,6 +1353,14 @@ ls.dLbls = DataLabelList(numFmt='#,##0;;;', dLblPos="t", showVal=True, showLegen
                          showCatName=False, showSerName=False, showPercent=False, showBubbleSize=False,
                          showLeaderLines=False)
 ls.dLbls.txPr = text_props(800, "374151", True)
+line.add_data(Reference(ws_calc, min_col=49, max_col=48 + N_MONTHS, min_row=CAP_ROW, max_row=CAP_ROW),
+              from_rows=True, titles_from_data=False)
+cs = line.series[1]
+cs.tx = SeriesLabel(strRef=StrRef(f"Calculs!$AT${CAP_ROW}"))
+cs.graphicalProperties = GraphicalProperties(ln=LineProperties(solidFill=CAP_LINE_C, w=19050, prstDash="dash"))
+cs.marker = Marker(symbol="none")
+cs.smooth = False
+line.grouping = "standard"
 line.set_categories(cats)
 bar += line
 
@@ -1401,6 +1477,10 @@ ws.conditional_formatting.add(f"{pct_col}{TABLE_R1}:{pct_col}{TABLE_R2}",
 ws.conditional_formatting.add(f"{adv_col}{TABLE_R1}:{adv_col}{TABLE_R2}",
                               DataBarRule(start_type="num", start_value=0, end_type="num", end_value=1,
                                           color="7FD1AE", showValue=True))
+# affaire en retard (Calculs!BY, même ordre que le tableau) : avancement en rouge
+ws.conditional_formatting.add(f"{adv_col}{TABLE_R1}:{adv_col}{TABLE_R2}",
+                              FormulaRule(formula=["AND(ISNUMBER(Calculs!$BY4),Calculs!$BY4>0)"],
+                                          font=Font(color=RED_T, bold=True)))
 
 NOTE_R = TABLE_R2 + 2
 put(NOTE_R, 0, NG - 1,
@@ -1409,16 +1489,17 @@ put(NOTE_R, 0, NG - 1,
     f'l\'onglet Charge ont à la fois un dessinateur (K) et une ressource externe (L) : une seule ressource par '
     f'ligne.",""))', font(9, True, "B45309"))
 NOTES = [
-    "Affaire = un sous-projet (projet + sous-projet + produit) : les lignes de ses ressources sont additionnées ; "
-    "chef de projet affiché = celui de sa 1re ligne ; avancement = moyenne de ses lignes pondérée par leurs heures.",
+    "Affaire = un sous-projet (projet + sous-projet + produit) : ses lignes sont additionnées ; chef = celui de sa "
+    "1re ligne ; avancement = toutes ses lignes pondérées par leurs heures ; reste à faire = heures × (1 − avancement).",
     "En cours = ligne dont l'avancement (O) est inférieur à 100 % : une ressource qui a terminé sa part sort du "
     "périmètre « Projets en cours », même si d'autres ressources continuent l'affaire.",
     "Charge par mois : les heures (M) sont réparties au prorata des jours ouvrés (lundi au vendredi, hors jours "
     "non travaillés de l'onglet Data) entre le début planifié (N) et la date de besoin (F) ; sans date de besoin "
     "valable, tout va sur le mois de début.",
-    "Au-delà de 9 projets, les plus petits sont regroupés en « Autres projets » (gris) dans les graphiques.",
-    "ETP = heures de projet ÷ (capacité − charge fixe hors projet) d'une personne sur un mois, soit 100 h avec les "
-    "valeurs par défaut (120 h − 20 h, réglables en haut de page).  Charge par ressource : onglet Dessinateurs.",
+    "Affaire en retard (avancement en rouge) : date de besoin dépassée sans être à 100 %, ou avancement inférieur de "
+    "plus de 15 points à l'avancement attendu au prorata des jours ouvrés écoulés depuis le début planifié.",
+    "Pointillés : capacité projets de l'équipe = somme des (capacité − charge fixe) des ressources des listes Data.  "
+    "ETP = heures ÷ (capacité − charge fixe) d'une personne.  Au-delà de 9 projets : « Autres projets » (gris).",
 ]
 for i, t in enumerate(NOTES):
     put(NOTE_R + 1 + i, 0, NG - 1, help_formula("aide_Dashboard", t), font(8, color=GREY, italic=True))
