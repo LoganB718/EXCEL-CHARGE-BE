@@ -207,29 +207,24 @@ ws_data.sheet_properties.tabColor = "6B7280"
 ws_data.print_area = f"A2:K{DATA_LAST}"
 
 
-def help_switch(sheet, label_cell, input_cell, name):
-    """Case « Afficher l'aide » (Oui / Non), placée hors de la zone d'impression."""
-    if label_cell:
-        lab = sheet[label_cell]
-        lab.value = "Afficher l'aide"
-        lab.font = font(9, True, GREY)
-        lab.alignment = Alignment(horizontal="right", vertical="center", indent=1)
-    cell = sheet[input_cell]
-    cell.value = "Oui"
-    cell.font = font(10, True, INPUT_INK)
-    cell.fill = fill(INPUT_FILL)
-    cell.alignment = Alignment(horizontal="center", vertical="center")
-    b = side("8FB3E6")
-    cell.border = Border(top=b, bottom=b, left=b, right=b)
-    v = DataValidation(type="list", formula1=HELP_CHOICES, allow_blank=False, showErrorMessage=True,
-                       errorTitle="Oui ou Non", error="Choisir Oui (aide affichée) ou Non (tableau épuré).")
-    v.add(input_cell)
-    sheet.add_data_validation(v)
-    col, row = re.match(r"([A-Z]+)(\d+)", input_cell).groups()
-    wb.defined_names[name] = DefinedName(name, attr_text=f"{sheet.title}!${col}${row}")
+MACRO_WARNING = ("ATTENTION : macros désactivées, les boutons et le masquage des lignes vides ne fonctionnent pas. "
+                 "Fermer le fichier, clic droit > Propriétés > cocher « Débloquer », rouvrir puis « Activer le "
+                 "contenu ».")
 
 
-help_switch(ws_data, "B1", "C1", "aide_Data")
+def macro_warning(sheet, cells):
+    """Voyant rouge hors zone d'impression : visible tant que les macros ne tournent pas (nom macros_actives, mis à
+    Oui par la macro d'ouverture du classeur, remis à Non avant chaque enregistrement)."""
+    first = cells.split(":")[0]
+    sheet.merge_cells(cells)
+    c = sheet[first]
+    c.value = f'=IF(macros_actives="Oui","",{lit(MACRO_WARNING)})'
+    c.font = font(9, True, RED_T)
+    c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+
+ws_data.row_dimensions[1].height = 26
+macro_warning(ws_data, "D1:H1")
 
 # ---------------------------------------------------------------- Charge
 CHARGE_COLS = [
@@ -328,8 +323,8 @@ ws["A2"].font = font(9, color=GREY, italic=True)
 ws["A2"].alignment = Alignment(wrap_text=True, vertical="top")
 ws.merge_cells("A2:I2")
 ws.row_dimensions[2].height = 28
-ws.row_dimensions[1].height = 24
-help_switch(ws, "D1", "E1", "aide_Charge")
+ws.row_dimensions[1].height = 26
+macro_warning(ws, "F1:I1")
 ws.print_area = f"A2:O{LAST}"
 ws.print_title_rows = "3:3"
 ws.page_setup.orientation = "landscape"
@@ -416,7 +411,9 @@ MARGIN_W = 2       # largeur des colonnes de marge A et BI (unité Excel) = 14 p
 MARGIN_H = 10.5    # hauteur des lignes de marge (points) = 14 pixels : mêmes marges en haut, en bas et sur les côtés
 LOGO = (51, 57)    # emplacement du logo de l'entreprise : cases fusionnées BA2:BG2
 # boutons des macros : hors zone d'impression, à droite de la colonne BI (placés par build_xlsm.py en BL2:BM4 et
-# BL6:BM7) ; l'aide de ces onglets s'affiche ou se masque par le bouton (état dans Calculs, noms aide_...)
+# BL6:BM7) ; l'aide de ces onglets s'affiche ou se masque par le bouton (état dans Calculs, noms aide_...).
+# Sous les boutons : voyant rouge tant que les macros ne tournent pas.
+MACRO_WARNING_CELLS = "BL9:BQ14"
 
 
 def gc(i):
@@ -555,6 +552,10 @@ INDICATORS = [
      "General"),
     ("aideDessinateurs", "Aide affichée sur Dessinateurs (Oui / Non, bouton « Afficher / masquer l'aide »)", "Oui",
      "General"),
+    ("aideCharge", "Aide affichée sur Charge (Oui / Non, bouton « Afficher / masquer l'aide »)", "Oui", "General"),
+    ("aideData", "Aide affichée sur Data (Oui / Non, bouton « Afficher / masquer l'aide »)", "Oui", "General"),
+    ("macrosActives", "Macros actives (Oui écrit à l'ouverture par la macro ; Non dans le fichier enregistré)", "Non",
+     "General"),
 ]
 ws["AK3"], ws["AL3"] = "Indicateur", "Valeur"
 for c in ("AK3", "AL3"):
@@ -573,12 +574,13 @@ expected = {"total": 4, "nbAff": 5, "nbProj": 7, "realise": 9, "autoStart": 13, 
             "periode": 15, "pic": 17, "picIdx": 18}
 for k, row in expected.items():
     assert K[k] == f"Calculs!$AL${row}", (k, K[k])
-for sheet_title in ("Dashboard", "Dessinateurs"):
+for sheet_title in ("Dashboard", "Dessinateurs", "Charge", "Data"):
     ref = K["aide" + sheet_title]
     wb.defined_names["aide_" + sheet_title] = DefinedName("aide_" + sheet_title, attr_text=ref)
     v = DataValidation(type="list", formula1=HELP_CHOICES, allow_blank=False)
     v.add(ref.split("!")[1].replace("$", ""))
     ws.add_data_validation(v)
+wb.defined_names["macros_actives"] = DefinedName("macros_actives", attr_text=K["macrosActives"])
 
 # Charge par mois (AN..AQ)
 for c, t in zip(("AN", "AO", "AP", "AQ"), ("N° mois", "Mois", "Charge (h)", "Affaires actives")):
@@ -1010,11 +1012,12 @@ def banner(title, subtitle, edite_name):
 
 
 def auto_hide_rows(sheet_title, *areas):
-    """Nom lignes_masquables_<onglet> : cellules repères dont la ligne est masquée par les macros quand elles
-    sont vides (lignes inutilisées des listes, aide masquée, alertes absentes), à l'écran comme dans le PDF."""
-    ref = ",".join(f"{sheet_title}!{a}" for a in areas)
-    name = f"lignes_masquables_{sheet_title}"
-    wb.defined_names[name] = DefinedName(name, attr_text=ref)
+    """Noms lignes_masquables_<onglet>_1, _2... (une zone par nom) : cellules repères dont la ligne est masquée
+    par les macros quand elles sont vides (lignes inutilisées des listes, aide masquée, alertes absentes), à
+    l'écran comme dans le PDF."""
+    for i, area in enumerate(areas, 1):
+        name = f"lignes_masquables_{sheet_title}_{i}"
+        wb.defined_names[name] = DefinedName(name, attr_text=f"{sheet_title}!{area}")
 
 
 # Bandeau titre
@@ -1423,6 +1426,7 @@ for i, t in enumerate(NOTES):
 ws.print_area = f"A1:{L(gc(NG))}{LAST_ROW}"
 auto_hide_rows("Dashboard", f"${gl(0)}${TABLE_R1}:${gl(0)}${TABLE_R2}",
                f"${gl(0)}${NOTE_R}:${gl(0)}${NOTE_R + len(NOTES)}")
+macro_warning(ws, MACRO_WARNING_CELLS)
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90
@@ -1747,6 +1751,10 @@ for i, t in enumerate(D_NOTES):
 ws.print_area = f"A1:{L(gc(NG))}{D_LAST}"
 auto_hide_rows("Dessinateurs", f"${gl(0)}$51:${gl(0)}$66", f"${gl(1)}$73:${gl(1)}${72 + N_DESS}",
                f"${gl(0)}$93:${gl(0)}${92 + len(D_NOTES)}")
+macro_warning(ws, MACRO_WARNING_CELLS)
+# Charge et Data : ligne d'aide (ligne 2) repliée quand l'aide est masquée
+auto_hide_rows("Charge", "$A$2")
+auto_hide_rows("Data", "$A$2")
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90

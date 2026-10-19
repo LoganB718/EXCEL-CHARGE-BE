@@ -9,11 +9,12 @@ Entrées (par défaut) :
 
 Sortie : un classeur .xlsm contenant
     - un projet VBA (xl/vbaProject.bin) : ThisWorkbook + un module de document par feuille
-      + le module standard PlanDeCharge (stocké en page de codes 1252, fins de ligne CRLF) ;
-    - deux boutons sur Dashboard et sur Dessinateurs, à droite de la zone d'impression :
-        « Éditer PDF »             couvrant BL2:BM4 -> macro <Onglet>_PDF
-        « Afficher / masquer l'aide »  couvrant BL6:BM7 -> macro <Onglet>_Aide
-      bleu foncé 1F2A44, texte blanc gras 10 pt, marge intérieure de 3 px.
+      (code des événements dans macros/*.vba) + le module standard PlanDeCharge (stocké en
+      page de codes 1252, fins de ligne CRLF) ;
+    - des boutons hors zone d'impression (voir BOUTONS) : « Éditer PDF » et « Afficher /
+      masquer l'aide » sur Dashboard et Dessinateurs (BL2:BM4, BL6:BM7), « Afficher / masquer
+      l'aide » en ligne 1 de Charge et de Data ; bleu foncé 1F2A44, texte blanc gras 10 pt,
+      marge intérieure de 3 px.
 
 Le travail est délégué aux deux modules voisins :
     vba_project.py : build_vba_project_bin()  -> octets du vbaProject.bin ([MS-OVBA], [MS-CFB])
@@ -84,13 +85,14 @@ CODENAMES = {
     "Calculs": "shCalculs",
 }
 
-ONGLETS_BOUTONS = ("Dashboard", "Dessinateurs")
-
-# (plage couverte, texte, suffixe de la macro <Onglet>_<suffixe>)
-BOUTONS = (
-    ("BL2:BM4", "Éditer PDF", "PDF"),
-    ("BL6:BM7", "Afficher / masquer l'aide", "Aide"),
-)
+# Boutons par onglet : (plage couverte, texte, suffixe de la macro <Onglet>_<suffixe>), hors zone d'impression.
+_AIDE = "Afficher / masquer l'aide"
+BOUTONS = {
+    "Dashboard": (("BL2:BM4", "Éditer PDF", "PDF"), ("BL6:BM7", _AIDE, "Aide")),
+    "Dessinateurs": (("BL2:BM4", "Éditer PDF", "PDF"), ("BL6:BM7", _AIDE, "Aide")),
+    "Charge": (("D1:E1", _AIDE, "Aide"),),
+    "Data": (("B1:B1", _AIDE, "Aide"),),
+}
 STYLE_BOUTON = {"fill": "1F2A44", "font_color": "FFFFFF", "bold": True, "font_size": 10,
                 "font_name": "Arial"}          # police du classeur
 MARGE_PX = 3          # marge intérieure entre le bouton et les bords des cellules
@@ -107,10 +109,10 @@ DOCUMENTS_CODE = {
 NOMS_REQUIS = {
     "aide_Dashboard": "Calculs", "edite_Dashboard": "Dashboard",
     "aide_Dessinateurs": "Calculs", "edite_Dessinateurs": "Dessinateurs",
+    "aide_Charge": "Calculs", "aide_Data": "Calculs", "macros_actives": "Calculs",
 }
-# Noms définis lus par AjusterLignes (plages, éventuellement en plusieurs morceaux, de l'onglet).
-PLAGES_REQUISES = {"lignes_masquables_Dashboard": "Dashboard",
-                   "lignes_masquables_Dessinateurs": "Dessinateurs"}
+# Noms lus par AjusterLignes : lignes_masquables_<onglet>_1, _2... (une plage de l'onglet par nom).
+ONGLETS_LIGNES = ("Dashboard", "Dessinateurs", "Charge", "Data")
 
 NS_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
@@ -289,23 +291,28 @@ def controler_classeur(xlsx):
         elif not re.match(motif, cible):
             problemes.append("nom défini %s = %s : une cellule de l'onglet %s est attendue"
                              % (nom, cible, onglet))
-    for nom, onglet in PLAGES_REQUISES.items():
-        cible = globaux.get(nom)
-        morceau = r"'?%s'?!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?" % re.escape(onglet)
-        if cible is None:
-            problemes.append("nom défini %s absent (utilisé par AjusterLignes)" % nom)
-        elif not re.match(r"^%s(?:,%s)*$" % (morceau, morceau), cible):
-            problemes.append("nom défini %s = %s : des plages de l'onglet %s sont attendues"
-                             % (nom, cible, onglet))
-    for onglet in ONGLETS_BOUTONS:
+    for onglet in ONGLETS_LIGNES:
+        plage = r"^'?%s'?!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?$" % re.escape(onglet)
+        noms = sorted((n for n in globaux if re.match(r"^lignes_masquables_%s_\d+$" % onglet, n)),
+                      key=lambda n: int(n.rsplit("_", 1)[1]))
+        if [n.rsplit("_", 1)[1] for n in noms] != [str(i) for i in range(1, len(noms) + 1)] or not noms:
+            problemes.append("noms lignes_masquables_%s_1, _2... absents ou non consécutifs (AjusterLignes)"
+                             % onglet)
+        for n in noms:
+            if not re.match(plage, globaux[n]):
+                problemes.append("nom défini %s = %s : une plage de l'onglet %s est attendue"
+                                 % (n, globaux[n], onglet))
+    for onglet, liste in BOUTONS.items():
         zone = zones.get(onglet)
         if zone is None:
             problemes.append("onglet %s : pas de zone d'impression" % onglet)
             continue
-        derniere = max(_col_index(c) for c in re.findall(r"\$?([A-Z]{1,3})\$?\d+", zone))
-        for plage, texte, _ in BOUTONS:
-            premiere_col = plage_vers_indices(plage)[0]
-            if premiere_col <= derniere:
+        refs = re.findall(r"\$?([A-Z]{1,3})\$?(\d+)", zone)
+        z_c1, z_c2 = min(_col_index(c) for c, _ in refs), max(_col_index(c) for c, _ in refs)
+        z_l1, z_l2 = min(int(r) for _, r in refs) - 1, max(int(r) for _, r in refs) - 1
+        for plage, texte, _ in liste:
+            c1, l1, c2, l2 = plage_vers_indices(plage)
+            if c1 <= z_c2 and c2 - 1 >= z_c1 and l1 <= z_l2 and l2 - 1 >= z_l1:
                 problemes.append("bouton « %s » (%s) dans la zone d'impression %s de %s"
                                  % (texte, plage, zone, onglet))
     return problemes
@@ -317,8 +324,8 @@ def controler_classeur(xlsx):
 def boutons():
     """Description des boutons pour make_xlsm()."""
     liste = []
-    for onglet in ONGLETS_BOUTONS:
-        for plage, texte, suffixe in BOUTONS:
+    for onglet, boutons_onglet in BOUTONS.items():
+        for plage, texte, suffixe in boutons_onglet:
             liste.append(bouton_plage(onglet, plage, texte, "%s_%s" % (onglet, suffixe),
                                       inset_px=MARGE_PX,
                                       name="Bouton %s %s" % (onglet, suffixe), **STYLE_BOUTON))
@@ -330,7 +337,7 @@ def construire(xlsx=XLSX_DEFAUT, bas=BAS_DEFAUT, sortie=SORTIE_DEFAUT, copie_bin
     """Construit le classeur .xlsm. Retourne le rapport de make_xlsm() complété.
     Lève ErreurControle si un contrôle échoue (sauf forcer=True : avertissements)."""
     nom, texte = lire_bas(bas)
-    macros = ["%s_%s" % (o, s) for o in ONGLETS_BOUTONS for _, _, s in BOUTONS]
+    macros = ["%s_%s" % (o, s) for o, liste in BOUTONS.items() for _, _, s in liste]
     problemes = controler_module(nom, texte, macros) + controler_classeur(xlsx)
     codes = {}
     for module, fichier in DOCUMENTS_CODE.items():

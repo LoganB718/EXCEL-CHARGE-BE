@@ -1,11 +1,10 @@
 ' Code du module du classeur (ThisWorkbook).
-' AjusterLignes est dans le module PlanDeCharge.
+' Les procédures appelées sont dans le module PlanDeCharge.
 Option Explicit
 
-' À l'ouverture : lignes vides du Dashboard et de l'onglet Dessinateurs masquées.
+' À l'ouverture : voyant « macros désactivées » éteint, lignes vides masquées.
 Private Sub Workbook_Open()
-    AjusterLignes "Dashboard"
-    AjusterLignes "Dessinateurs"
+    MacrosActives
 End Sub
 
 ' Le classeur est enregistré avec toutes les lignes visibles : ouvert un jour sans macros, il ne
