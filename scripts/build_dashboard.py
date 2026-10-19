@@ -1550,7 +1550,12 @@ for r in range(1, D_LAST + 1):
 
 banner("CHARGE PAR RESSOURCE (DESSINATEURS ET EXTERNES)",
        "Charge fixe hors projet + heures de ses lignes dans l'onglet Charge, comparées à la capacité mensuelle de la "
-       "personne.", "edite_Dessinateurs")
+       "personne.", "edite_Dessinateurs",
+       left4=f'=IF({DS["nom"]}="","",{DS["nom"]}&IF({DS["type"]}="Externe"," (ressource externe)","")&"  ·  ")'
+             f'&"Périmètre : "&{DS["perim"]}')
+# la barre de choix de la ressource (lignes 5 à 7) n'est pas imprimée par « Éditer PDF » : rappel en ligne 4
+wb.defined_names["lignes_pdf_Dessinateurs"] = DefinedName("lignes_pdf_Dessinateurs",
+                                                          attr_text="Dessinateurs!$A$5:$A$7")
 
 # barre (lignes 6-7, comme sur le Dashboard) : choix de la ressource + rappel de ses réglages
 B = P_ROW

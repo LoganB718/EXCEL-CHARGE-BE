@@ -8,7 +8,7 @@ Option Explicit
 '   lignes_masquables_<onglet>_1, _2... : cellules repères (une zone par nom) ; leur ligne est
 '       masquée quand elles sont vides (lignes inutilisées des listes, aide masquée, alertes absentes)
 '   macros_actives                : Oui quand les macros tournent (le voyant rouge des onglets disparaît)
-'   lignes_pdf_<onglet>           : lignes non imprimées dans le PDF (barre de réglages du Dashboard)
+'   lignes_pdf_<onglet>           : lignes non imprimées dans le PDF (barres de réglages et de choix)
 ' Les modules ThisWorkbook (ouverture, enregistrement) et des feuilles Dashboard et Dessinateurs
 ' (activation de l'onglet, modification d'un réglage) appellent MacrosActives, AjusterLignes, etc.
 
