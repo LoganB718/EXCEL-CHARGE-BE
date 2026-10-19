@@ -550,7 +550,7 @@ INDICATORS = [
     ("finPeriode", "Dernier mois affiché", f"=EDATE(AL14,{N_MONTHS - 1})", "MMM YYYY"),
     ("picPart", "Part du mois de pic dans la charge de la période", "=IF(AL15=0,0,AL17/AL15)", "0%"),
     ("periodeTxt", "Période affichée (bandeau des onglets Dashboard et Dessinateurs)",
-     f'="Période : "&{mois_fr("AL14")}&" "&YEAR(AL14)&" – "&{mois_fr("AL25")}&" "&YEAR(AL25)', "General"),
+     f'="Période "&{mois_fr("AL14")}&" "&YEAR(AL14)&" – "&{mois_fr("AL25")}&" "&YEAR(AL25)', "General"),
 ]
 ws["AK3"], ws["AL3"] = "Indicateur", "Valeur"
 for c in ("AK3", "AL3"):
@@ -987,7 +987,7 @@ def section(r, text):
 
 def banner(title, subtitle, edite_name):
     """Bandeau des lignes 2 à 4 : titre, logo (BA2:BG2), « Édité le » et période affichée.
-    « Édité le » est une date fixe, écrite par la macro « Éditer le PDF » (nom défini `edite_name`)."""
+    « Édité le » est une date fixe, écrite par la macro « Éditer PDF » (nom défini `edite_name`)."""
     for r in (2, 3, 4):
         for i in range(NG):
             ws.cell(r, gc(i)).fill = fill(NAVY)
@@ -999,6 +999,13 @@ def banner(title, subtitle, edite_name):
     put(4, 30, LOGO[1], f"={K['periodeTxt']}", font(10, True, WHITE), h="right", bg=NAVY)
 
 
+def pdf_rows(sheet_title, *areas):
+    """Nom pdf_lignes_<onglet> : cellules dont la ligne est masquée par la macro « Éditer PDF » si elles
+    sont vides (lignes inutilisées des listes, aide masquée, alertes absentes) : pas de pages blanches."""
+    ref = ",".join(f"{sheet_title}!{a}" for a in areas)
+    wb.defined_names[f"pdf_lignes_{sheet_title}"] = DefinedName(f"pdf_lignes_{sheet_title}", attr_text=ref)
+
+
 # Bandeau titre
 banner("TABLEAU DE BORD — PLAN DE CHARGE DU BUREAU D'ÉTUDES",
        "Synthèse automatique de l'onglet Charge : mettre à jour Charge et Data, le tableau de bord se recalcule seul.",
@@ -1007,7 +1014,7 @@ banner("TABLEAU DE BORD — PLAN DE CHARGE DU BUREAU D'ÉTUDES",
 # Barre de paramètres
 box(P_ROW, P_ROW + 1, 0, NG - 1)
 labels = {"p_Perimetre": (0, 3, "Périmètre"), "p_Repartition": (12, 15, "Répartition"),
-          "p_PremierMois": (30, 34, "1er mois affiché"), "p_HeuresETP": (41, 44, "Capacité"),
+          "p_PremierMois": (29, 34, "1er mois affiché"), "p_HeuresETP": (41, 44, "Capacité"),
           "p_ChargeFixe": (50, 53, "Charge fixe")}
 defaults = {"p_Perimetre": PERIM_RUN, "p_Repartition": REP_SMOOTH, "p_PremierMois": None, "p_HeuresETP": 120,
             "p_ChargeFixe": 20}
@@ -1405,12 +1412,16 @@ for i, t in enumerate(NOTES):
 # case « Afficher l'aide » à droite de la page, hors de la zone imprimée, sous les boutons des macros
 help_switch(ws, BTN_AIDE_LABEL, BTN_AIDE_CELL, "aide_Dashboard")
 ws.print_area = f"A1:{L(gc(NG))}{LAST_ROW}"
+pdf_rows("Dashboard", f"${gl(0)}${TABLE_R1}:${gl(0)}${TABLE_R2}",
+         f"${gl(0)}${NOTE_R}:${gl(0)}${NOTE_R + len(NOTES)}")
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90
 ws.row_breaks.append(Break(id=56))
 ws.page_margins.left = ws.page_margins.right = 0.3
 ws.page_margins.top = ws.page_margins.bottom = 0.4
+ws.print_title_rows = "1:1"                 # ligne de marge répétée en haut de chaque page
+ws.print_options.horizontalCentered = True
 ws.sheet_properties.tabColor = ACCENT
 
 # ---------------------------------------------------------------- Dessinateurs
@@ -1727,12 +1738,16 @@ for i, t in enumerate(D_NOTES):
 # case « Afficher l'aide » à droite de la page, hors de la zone imprimée, sous les boutons des macros
 help_switch(ws, BTN_AIDE_LABEL, BTN_AIDE_CELL, "aide_Dessinateurs")
 ws.print_area = f"A1:{L(gc(NG))}{D_LAST}"
+pdf_rows("Dessinateurs", f"${gl(0)}$51:${gl(0)}$66", f"${gl(1)}$73:${gl(1)}${72 + N_DESS}",
+         f"${gl(0)}$93:${gl(0)}${92 + len(D_NOTES)}")
 ws.page_setup.orientation = "landscape"
 ws.page_setup.paperSize = ws.PAPERSIZE_A3
 ws.page_setup.scale = 90
 ws.row_breaks.append(Break(id=47))
 ws.page_margins.left = ws.page_margins.right = 0.3
 ws.page_margins.top = ws.page_margins.bottom = 0.4
+ws.print_title_rows = "1:1"                 # ligne de marge répétée en haut de chaque page
+ws.print_options.horizontalCentered = True
 
 # contrôles : aucune constante texte de plus de 255 caractères dans une formule (limite Excel), aucune infobulle
 for _ws in wb.worksheets:

@@ -11,7 +11,7 @@ Sortie : un classeur .xlsm contenant
     - un projet VBA (xl/vbaProject.bin) : ThisWorkbook + un module de document par feuille
       + le module standard PlanDeCharge (stocké en page de codes 1252, fins de ligne CRLF) ;
     - deux boutons sur Dashboard et sur Dessinateurs, à droite de la zone d'impression :
-        « Éditer le PDF »             couvrant BL2:BM4 -> macro <Onglet>_PDF
+        « Éditer PDF »             couvrant BL2:BM4 -> macro <Onglet>_PDF
         « Afficher / masquer l'aide »  couvrant BL6:BM7 -> macro <Onglet>_Aide
       bleu foncé 1F2A44, texte blanc gras 10 pt, marge intérieure de 3 px.
 
@@ -88,11 +88,11 @@ ONGLETS_BOUTONS = ("Dashboard", "Dessinateurs")
 
 # (plage couverte, texte, suffixe de la macro <Onglet>_<suffixe>)
 BOUTONS = (
-    ("BL2:BM4", "Éditer le PDF", "PDF"),
+    ("BL2:BM4", "Éditer PDF", "PDF"),
     ("BL6:BM7", "Afficher / masquer l'aide", "Aide"),
 )
 STYLE_BOUTON = {"fill": "1F2A44", "font_color": "FFFFFF", "bold": True, "font_size": 10,
-                "font_name": "Calibri"}
+                "font_name": "Arial"}          # police du classeur
 MARGE_PX = 3          # marge intérieure entre le bouton et les bords des cellules
 
 # Noms définis lus par le module (cellule unique de l'onglet indiqué).
