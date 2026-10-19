@@ -527,7 +527,7 @@ INDICATORS = [
     ("avgSimple", "Avancement moyen (moyenne simple des affaires)",
      f"=IF(AL5=0,0,SUM(EU{R1}:EU{R2})/AL5)", "0.0%"),
     ("avgPond", "Avancement moyen pondéré par les heures (toutes les lignes des affaires du périmètre)",
-     f"=IF(SUM(FH{R1}:FH{R2})=0,0,SUM(FI{R1}:FI{R2})/SUM(FH{R1}:FH{R2}))", "0.0%"),
+     f"=IF(SUM(FH{R1}:FH{R2})=0,AL11,SUM(FI{R1}:FI{R2})/SUM(FH{R1}:FH{R2}))", "0.0%"),
     ("autoStart", "1er mois automatique (1er début planifié)",
      f"=IF(COUNT(I{R1}:I{R2})=0,DATE(YEAR(TODAY()),MONTH(TODAY()),1),"
      f"DATE(YEAR(MIN(I{R1}:I{R2})),MONTH(MIN(I{R1}:I{R2})),1))", "MMM YYYY"),
@@ -565,18 +565,17 @@ INDICATORS += [
     ("capEquipe", "Capacité projets de l'équipe (h/mois) : somme des (capacité - charge fixe) des ressources Data",
      f"=SUM(FM4:FM{3 + 2 * (DATA_LAST - 3)})", "#,##0"),
     ("nbSurcharge", "Mois où la charge dépasse la capacité projets de l'équipe",
-     f"=IF(AL{_cap}<=0,0,SUMPRODUCT(--(ROUND(AP4:AP{3 + N_MONTHS},0)>ROUND(AL{_cap},0))))", "0"),
+     f"=SUMPRODUCT(--(ROUND(AP4:AP{3 + N_MONTHS},0)>ROUND(AL{_cap},0)))", "0"),
     ("premSurcharge", "Premier mois en surcharge",
      f'=IF(AL{_sur}=0,"",INDEX(AO4:AO{3 + N_MONTHS},MATCH(1,INDEX(--(ROUND(AP4:AP{3 + N_MONTHS},0)>'
      f'ROUND(AL{_cap},0)),0),0)))', "MMM YYYY"),
-    ("picCap", "Pic de charge rapporté à la capacité de l'équipe", f"=IF(AL{_cap}<=0,0,AL17/AL{_cap})", "0%"),
+    ("picCap", "Pic de charge rapporté à la capacité de l'équipe", f'=IF(AL{_cap}<=0,"",AL17/AL{_cap})', "0%"),
     ("nbRetard", "Affaires en retard", f'=COUNTIF(FL{R1}:FL{R2},">0")', "0"),
     ("nbDepasse", "dont date de besoin dépassée sans être à 100 %", f"=COUNTIF(FL{R1}:FL{R2},2)", "0"),
     ("nbEcart", "dont avancement inférieur de plus de 15 points à l'attendu", f"=COUNTIF(FL{R1}:FL{R2},1)", "0"),
     ("reglagesTxt", "Rappel des réglages (bandeau du Dashboard)",
-     f'=p_Perimetre&"  ·  "&IF(p_Repartition="{REP_SMOOTH}","charge lissée en jours ouvrés jusqu\'à la date de '
-     f'besoin","charge sur le mois de début planifié")&"  ·  "&p_HeuresETP&" h par personne dont "&p_ChargeFixe'
-     f'&" h hors projet"', "General"),
+     f'=p_Perimetre&"  ·  "&IF(p_Repartition="{REP_SMOOTH}","lissage en jours ouvrés jusqu\'au besoin",'
+     f'"tout sur le mois de début")&"  ·  "&p_HeuresETP&" h/pers. dont "&p_ChargeFixe&" h hors projet"', "General"),
 ]
 ws["AK3"], ws["AL3"] = "Indicateur", "Valeur"
 for c in ("AK3", "AL3"):
@@ -740,7 +739,7 @@ for r in range(R1, R2 + 1):
                     f'"~","-"),"*","+"),"?","!"),240),"")')
     ws[f"FG{r}"] = f"=IF(B{r}=1,MAX(0,N(Charge!M{r})),0)"
     ws[f"FH{r}"] = f'=IF(EO{r}=1,ROUND(SUMIF({A_RNG["FF"]},EN{r},{A_RNG["FG"]}),2),"")'
-    ws[f"FI{r}"] = f'=IF(EO{r}=1,SUMPRODUCT(({A_RNG["FF"]}=EN{r})*{A_RNG["FG"]}*{A_RNG["C"]}),"")'
+    ws[f"FI{r}"] = f'=IF(EO{r}=1,ROUND(SUMPRODUCT(({A_RNG["FF"]}=EN{r})*{A_RNG["FG"]}*{A_RNG["C"]}),2),"")'
     ws[f"FJ{r}"] = f'=IF(EO{r}=1,MAX(0,ROUND(FH{r}-FI{r},2)),"")'
     ws[f"EU{r}"] = (f'=IF(EO{r}=1,IF(FH{r}>0,FI{r}/FH{r},AVERAGEIF({A_RNG["FF"]},EN{r},{A_RNG["C"]})),"")')
     ws[f"EV{r}"] = f"=IF(ISNUMBER(I{r}),I{r},2958465)"
@@ -750,7 +749,7 @@ for r in range(R1, R2 + 1):
     ws[f"EY{r}"] = f'=IF(EO{r}=1,SUMPRODUCT(MAX(({A_RNG["EN"]}=EN{r})*{A_RNG["EX"]})),"")'
     # retard : besoin dépassé sans être à 100 %, ou avancement < avancement attendu - 15 points
     ws[f"FK{r}"] = (f'=IF(EO{r}=1,IF(OR(EW{r}>=2958465,EY{r}=0,EY{r}<=EW{r}),"",IF(TODAY()<=EW{r},0,'
-                    f'IF(TODAY()>=EY{r},1,IFERROR(NETWORKDAYS(EW{r},TODAY(),{HOLIDAYS})'
+                    f'IF(TODAY()>EY{r},1,IFERROR(NETWORKDAYS(EW{r},TODAY()-1,{HOLIDAYS})'
                     f'/NETWORKDAYS(EW{r},EY{r},{HOLIDAYS}),"")))),"")')
     ws[f"FL{r}"] = (f'=IF(EO{r}=1,IF(AND(EY{r}>0,EY{r}<TODAY(),ROUND(EU{r},4)<1),2,'
                     f'IF(FK{r}="",0,IF(ROUND(EU{r}-FK{r},4)<-0.15,1,0))),"")')
@@ -1240,7 +1239,7 @@ KPIS = [
      (f"={K['picMois']}", '"en "MMMM YYYY'),
      (f'={K["picActives"]}&" affaire(s) active(s)  ·  ≈ "&ROUND({K["picETP"]},1)&" ETP"', None)),
     ("AFFAIRES EN RETARD", f"={K['nbRetard']}", "0",
-     (f"={K['nbDepasse']}", '"dont "0" date de besoin dépassée"'),
+     (f"={K['nbDepasse']}", '"dont "0" hors délai (besoin dépassé)"'),
      (f"={K['nbEcart']}", '0" en retard de plus de 15 pts"')),
     ("NOMBRE D'AFFAIRES", f"={K['nbAff']}", "0",
      (f"={K['nbProj']}", '"réparties sur "0" projet(s)"'),
@@ -1477,9 +1476,14 @@ ws.conditional_formatting.add(f"{pct_col}{TABLE_R1}:{pct_col}{TABLE_R2}",
 ws.conditional_formatting.add(f"{adv_col}{TABLE_R1}:{adv_col}{TABLE_R2}",
                               DataBarRule(start_type="num", start_value=0, end_type="num", end_value=1,
                                           color="7FD1AE", showValue=True))
-# affaire en retard (Calculs!BY, même ordre que le tableau) : avancement en rouge
+# affaire en retard : avancement en rouge. Colonne technique masquée BJ (hors zone d'impression) = Calculs!BY,
+# pour que la mise en forme conditionnelle ne référence que sa propre feuille.
+LATE_COL = L(gc(NG) + 1)   # BJ
+for k in range(N_TABLE):
+    ws[f"{LATE_COL}{TABLE_R1 + k}"] = f"=Calculs!BY{4 + k}"
+ws.column_dimensions[LATE_COL].hidden = True
 ws.conditional_formatting.add(f"{adv_col}{TABLE_R1}:{adv_col}{TABLE_R2}",
-                              FormulaRule(formula=["AND(ISNUMBER(Calculs!$BY4),Calculs!$BY4>0)"],
+                              FormulaRule(formula=[f"AND(ISNUMBER(${LATE_COL}{TABLE_R1}),${LATE_COL}{TABLE_R1}>0)"],
                                           font=Font(color=RED_T, bold=True)))
 
 NOTE_R = TABLE_R2 + 2

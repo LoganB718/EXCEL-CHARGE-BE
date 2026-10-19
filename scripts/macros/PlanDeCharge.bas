@@ -118,9 +118,20 @@ Private Sub SignalerMacros(ByVal actives As Boolean)
     ThisWorkbook.Names("macros_actives").RefersToRange.Value = IIf(actives, "Oui", "Non")
 End Sub
 
-' À l'ouverture (Workbook_Open) : voyant éteint, lignes vides masquées.
+' Barres de réglages réaffichées (masquées seulement pendant l'export PDF).
+Private Sub ReafficherLignesPDF()
+    Dim cle As Variant, plage As Range
+    On Error Resume Next       ' feuille protégée : on laisse tel quel
+    For Each cle In Array("Dashboard", "Dessinateurs")
+        Set plage = PlageFacultative("lignes_pdf_" & cle)
+        If Not plage Is Nothing Then plage.EntireRow.Hidden = False
+    Next cle
+End Sub
+
+' À l'ouverture (Workbook_Open) : voyant éteint, barres de réglages visibles, lignes vides masquées.
 Public Sub MacrosActives()
     SignalerMacros True
+    ReafficherLignesPDF
     AjusterTout
 End Sub
 
@@ -131,6 +142,7 @@ End Sub
 Public Sub PreparerEnregistrement()
     If EnregistrementAutomatique() Then Exit Sub
     SignalerMacros False
+    ReafficherLignesPDF
     AjusterTout True
 End Sub
 
@@ -185,6 +197,7 @@ Private Sub EditerPDF(ByVal cle As String)
 
     ancienneAide = cAide.Value
     ancienneDate = cEdite.Value
+    Application.EnableCancelKey = xlErrorHandler   ' Échap pendant l'export : on passe par Restaurer
     On Error GoTo Erreur
     Application.ScreenUpdating = False
     cAide.Value = "Non"        ' le PDF ne contient pas les textes d'aide
