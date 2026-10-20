@@ -617,6 +617,16 @@ for m, mc in enumerate(MCOLS):
     ws[f"AQ{r}"] = (f"=SUMPRODUCT(({mc}{R1}:{mc}{R2}>0)/(COUNTIFS($EN${R1}:$EN${R2},$EN${R1}:$EN${R2},"
                      f"{mc}{R1}:{mc}{R2},\">0\")+({mc}{R1}:{mc}{R2}<=0)))")
 
+# Plages lues par le rapport Power BI, colonnes par position, sans les en-têtes de la ligne 3 : données de Charge et
+# de Data, indicateurs (AK libellé / AL valeur) et charge des mois affichés (AO mois / AP charge)
+# le rapport lit les indicateurs par leur ligne : un nouvel indicateur s'ajoute en fin de liste
+assert K["capEquipe"] == "Calculs!$AL$33" and K["reglagesTxt"] == "Calculs!$AL$40"
+for name, ref in (("bi_Charge", f"Charge!$A${FIRST}:${CHARGE_COLS[-1][0]}${LAST}"),
+                  ("bi_Data", f"Data!$A$4:$K${DATA_LAST}"),
+                  ("bi_Indicateurs", f"Calculs!$AK$4:$AL${3 + len(INDICATORS)}"),
+                  ("bi_Mois", f"Calculs!$AO$4:$AP${3 + N_MONTHS}")):
+    wb.defined_names[name] = DefinedName(name, attr_text=ref)
+
 # Matrice des groupes de couleur (AS..BH) : séries des graphiques
 SM = [L(49 + m) for m in range(N_MONTHS)]  # AW..BH
 for c, t in zip(("AS", "AT", "AU", "AV"), ("Groupe", "Projet", "Charge (h)", "Part")):

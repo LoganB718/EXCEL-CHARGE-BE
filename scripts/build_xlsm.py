@@ -20,8 +20,8 @@ Le travail est délégué aux deux modules voisins :
     vba_project.py : build_vba_project_bin()  -> octets du vbaProject.bin ([MS-OVBA], [MS-CFB])
     make_xlsm.py   : make_xlsm()              -> chirurgie minimale du paquetage OPC
 Ce script ajoute les contrôles de cohérence propres à ce classeur (macros des boutons présentes
-dans le module, noms définis utilisés par le module, boutons hors zone d'impression,
-identifiants réservés de VBA) et écrit la sortie de façon atomique.
+dans le module, noms définis utilisés par le module ou par le rapport Power BI, boutons hors
+zone d'impression, identifiants réservés de VBA) et écrit la sortie de façon atomique.
 
 Choix des codeName (noms de code VBA des feuilles) : shCharge, shData, shDashboard,
 shDessinateurs, shCalculs (et ThisWorkbook pour le classeur), plutôt que Feuil1…Feuil5 :
@@ -110,6 +110,11 @@ NOMS_REQUIS = {
     "aide_Dashboard": "Calculs", "edite_Dashboard": "Dashboard",
     "aide_Dessinateurs": "Calculs", "edite_Dessinateurs": "Dessinateurs",
     "aide_Charge": "Calculs", "aide_Data": "Calculs", "macros_actives": "Calculs",
+}
+# Plages lues par position par le rapport Power BI : onglet, 1re cellule, dernière colonne (nombre de lignes libre).
+PLAGES_POWER_BI = {
+    "bi_Charge": ("Charge", "$A$4", "$O"), "bi_Data": ("Data", "$A$4", "$K"),
+    "bi_Indicateurs": ("Calculs", "$AK$4", "$AL"), "bi_Mois": ("Calculs", "$AO$4", "$AP"),
 }
 # Noms lus par AjusterLignes : lignes_masquables_<onglet>_1, _2... (une plage de l'onglet par nom).
 ONGLETS_LIGNES = ("Dashboard", "Dessinateurs", "Charge", "Data")
@@ -291,6 +296,14 @@ def controler_classeur(xlsx):
         elif not re.match(motif, cible):
             problemes.append("nom défini %s = %s : une cellule de l'onglet %s est attendue"
                              % (nom, cible, onglet))
+    for nom, (onglet, debut, col_fin) in PLAGES_POWER_BI.items():
+        cible = globaux.get(nom)
+        motif = r"^'?%s'?!%s:%s\$\d+$" % (re.escape(onglet), re.escape(debut), re.escape(col_fin))
+        if cible is None:
+            problemes.append("nom défini %s absent (lu par le rapport Power BI)" % nom)
+        elif not re.match(motif, cible):
+            problemes.append("nom défini %s = %s : une plage %s!%s:%s… est attendue (rapport Power BI)"
+                             % (nom, cible, onglet, debut, col_fin))
     for onglet in ONGLETS_LIGNES:
         plage = r"^'?%s'?!\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?$" % re.escape(onglet)
         noms = sorted((n for n in globaux if re.match(r"^lignes_masquables_%s_\d+$" % onglet, n)),
