@@ -1339,6 +1339,18 @@ mesure("Rappel des réglages", D_TX, None, "Réglages appliqués par les segment
     & "  ·  " & SELECTEDVALUE ( 'Réglages'[Rappel capacité] )""")
 mesure("Données lues le", D_TX, None, "Date et heure de l'actualisation (heure de Paris).",
        "SELECTEDVALUE ( Actualisation[Libellé] )")
+mesure("Filtres appliqués", D_TX, None, "Chef de projet, projet et type choisis dans les segments (en-tête des "
+       "pages PDF), ou « Toutes les affaires du périmètre ».", """
+VAR _c = IF ( ISFILTERED ( Lignes[Chef de projet] ), "Chef de projet : "
+    & CONCATENATEX ( VALUES ( Lignes[Chef de projet] ), Lignes[Chef de projet], ", ", Lignes[Chef de projet], ASC ) )
+VAR _p = IF ( ISFILTERED ( Lignes[Projet] ), "Projet : "
+    & CONCATENATEX ( VALUES ( Lignes[Projet] ), Lignes[Projet], ", ", Lignes[Projet], ASC ) )
+VAR _t = IF ( ISFILTERED ( Lignes[Type] ), "Type : "
+    & CONCATENATEX ( VALUES ( Lignes[Type] ), Lignes[Type], ", ", Lignes[Type], ASC ) )
+RETURN
+    IF ( _c & _p & _t = "", "Toutes les affaires du périmètre",
+        _c & IF ( _c <> "" && _p <> "", "  ·  " ) & _p
+            & IF ( ( _c <> "" || _p <> "" ) && _t <> "", "  ·  " ) & _t )""")
 mesure("Titre du périmètre", D_TX, None, "PROJETS EN COURS ou TOUS LES PROJETS.", """
 IF ( [Périmètre en vigueur] = "Tous les projets", "TOUS LES PROJETS", "PROJETS EN COURS" )""")
 mesure("Sous-titre chefs", D_TX, None, "Sous-titre de la carte des chefs de projet.", """

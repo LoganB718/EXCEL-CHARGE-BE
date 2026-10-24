@@ -3,11 +3,11 @@
   "name": "69bee8ed9c1c91ae1caa",
   "position": {
     "x": 16,
-    "y": 1704,
-    "z": 106000,
+    "y": 1644,
+    "z": 102000,
     "height": 150,
     "width": 1248,
-    "tabOrder": 106000
+    "tabOrder": 102000
   },
   "visual": {
     "visualType": "textbox",
@@ -43,7 +43,7 @@
               {
                 "textRuns": [
                   {
-                    "value": "•  Périmètre « Projets en cours » = lignes dont l'avancement (colonne O) est inférieur à 100 % : une ressource qui a terminé sa part sort du périmètre, même si d'autres continuent l'affaire. « Comme dans Excel » applique les réglages enregistrés dans le classeur.",
+                    "value": "•  Périmètre « Projets en cours » = lignes dont l'avancement (colonne O) est inférieur à 100 % : une ressource qui a terminé sa part sort du périmètre, même si d'autres continuent l'affaire. Périmètre, répartition et période sont ceux enregistrés dans le classeur (volet Filtres pour les changer).",
                     "textStyle": {
                       "fontSize": "8pt",
                       "fontStyle": "italic",

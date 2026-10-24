@@ -3,11 +3,11 @@
   "name": "51d5b41123d424038e70",
   "position": {
     "x": 196.6,
-    "y": 512.6666666666666,
-    "z": 53000,
+    "y": 468.66666666666663,
+    "z": 51000,
     "height": 19.833333333333332,
     "width": 213.4,
-    "tabOrder": 55000
+    "tabOrder": 53000
   },
   "visual": {
     "visualType": "multiRowCard",

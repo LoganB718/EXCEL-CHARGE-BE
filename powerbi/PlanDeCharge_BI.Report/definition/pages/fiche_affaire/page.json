@@ -3,7 +3,7 @@
   "name": "fiche_affaire",
   "displayName": "Fiche affaire",
   "displayOption": "FitToWidth",
-  "height": 1186,
+  "height": 1146,
   "width": 1280,
   "filterConfig": {
     "filters": [

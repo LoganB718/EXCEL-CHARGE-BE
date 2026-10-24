@@ -3,8 +3,68 @@
   "name": "ressources",
   "displayName": "Ressources",
   "displayOption": "FitToWidth",
-  "height": 2034,
+  "height": 1880,
   "width": 1280,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "filtre_periode",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Mois"
+              }
+            },
+            "Property": "Période"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "m",
+              "Entity": "Mois",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "m"
+                          }
+                        },
+                        "Property": "Période"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'12 mois du Dashboard Excel'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "ordinal": 0
+      }
+    ],
+    "filterSortOrder": "Custom"
+  },
   "objects": {
     "background": [
       {
@@ -83,31 +143,6 @@
     },
     {
       "source": "a92ee5bb52f3af8e2237",
-      "target": "16ec930cfd7ed7dce8cb",
-      "type": "NoFilter"
-    },
-    {
-      "source": "a92ee5bb52f3af8e2237",
-      "target": "485b7deebcb60e395791",
-      "type": "NoFilter"
-    },
-    {
-      "source": "a92ee5bb52f3af8e2237",
-      "target": "cbc3ad528eba0c1866f0",
-      "type": "NoFilter"
-    },
-    {
-      "source": "a92ee5bb52f3af8e2237",
-      "target": "533e0284222ba91fa57a",
-      "type": "NoFilter"
-    },
-    {
-      "source": "a92ee5bb52f3af8e2237",
-      "target": "21bead4037068ffa6e31",
-      "type": "NoFilter"
-    },
-    {
-      "source": "a92ee5bb52f3af8e2237",
       "target": "9f80f80409a34514e797",
       "type": "NoFilter"
     },
@@ -214,6 +249,11 @@
     {
       "source": "a92ee5bb52f3af8e2237",
       "target": "993108868170dd51b715",
+      "type": "NoFilter"
+    },
+    {
+      "source": "a92ee5bb52f3af8e2237",
+      "target": "21bead4037068ffa6e31",
       "type": "NoFilter"
     },
     {
@@ -233,31 +273,6 @@
     },
     {
       "source": "21bead4037068ffa6e31",
-      "target": "16ec930cfd7ed7dce8cb",
-      "type": "NoFilter"
-    },
-    {
-      "source": "21bead4037068ffa6e31",
-      "target": "485b7deebcb60e395791",
-      "type": "NoFilter"
-    },
-    {
-      "source": "21bead4037068ffa6e31",
-      "target": "cbc3ad528eba0c1866f0",
-      "type": "NoFilter"
-    },
-    {
-      "source": "21bead4037068ffa6e31",
-      "target": "533e0284222ba91fa57a",
-      "type": "NoFilter"
-    },
-    {
-      "source": "21bead4037068ffa6e31",
-      "target": "a92ee5bb52f3af8e2237",
-      "type": "NoFilter"
-    },
-    {
-      "source": "21bead4037068ffa6e31",
       "target": "9f80f80409a34514e797",
       "type": "NoFilter"
     },
@@ -367,8 +382,8 @@
       "type": "NoFilter"
     },
     {
-      "source": "cbc3ad528eba0c1866f0",
-      "target": "533e0284222ba91fa57a",
+      "source": "21bead4037068ffa6e31",
+      "target": "a92ee5bb52f3af8e2237",
       "type": "NoFilter"
     }
   ]

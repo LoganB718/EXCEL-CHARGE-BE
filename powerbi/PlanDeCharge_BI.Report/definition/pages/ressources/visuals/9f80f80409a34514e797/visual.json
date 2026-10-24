@@ -3,11 +3,11 @@
   "name": "9f80f80409a34514e797",
   "position": {
     "x": 16,
-    "y": 772,
-    "z": 20000,
+    "y": 140,
+    "z": 10000,
     "height": 56,
     "width": 300,
-    "tabOrder": 20000
+    "tabOrder": 10000
   },
   "visual": {
     "visualType": "slicer",
@@ -242,6 +242,11 @@
           }
         }
       ]
+    },
+    "syncGroup": {
+      "groupName": "sync_ressource",
+      "fieldChanges": true,
+      "filterChanges": true
     },
     "drillFilterOtherVisuals": true
   },

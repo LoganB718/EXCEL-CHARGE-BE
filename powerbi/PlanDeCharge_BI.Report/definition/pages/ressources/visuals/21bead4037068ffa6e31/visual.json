@@ -3,11 +3,11 @@
   "name": "21bead4037068ffa6e31",
   "position": {
     "x": 16,
-    "y": 636,
-    "z": 17000,
+    "y": 1650,
+    "z": 57000,
     "height": 84,
     "width": 1248,
-    "tabOrder": 17000
+    "tabOrder": 57000
   },
   "visual": {
     "visualType": "pivotTable",

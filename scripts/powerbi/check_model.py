@@ -224,7 +224,7 @@ MOTS_CLES = {"VAR", "RETURN", "IN", "NOT", "AND", "OR", "TRUE", "FALSE", "ASC", 
 ARITE = {"ABS": (1, 1), "ALLSELECTED": (0, None), "AVERAGEX": (2, 2), "BLANK": (0, 0), "CALCULATE": (1, None),
          "COALESCE": (2, None), "CONCATENATEX": (2, None), "COUNTROWS": (0, 1), "DISTINCTCOUNT": (1, 1),
          "DIVIDE": (2, 3), "FALSE": (0, 0), "FILTER": (2, 2), "FORMAT": (2, 3), "HASONEVALUE": (1, 1), "IF": (2, 3), "INT": (1, 1),
-         "ISBLANK": (1, 1), "ISEMPTY": (1, 1), "KEEPFILTERS": (1, 1), "LOOKUPVALUE": (3, None), "MAX": (1, 2), "MAXX": (2, 2),
+         "ISBLANK": (1, 1), "ISEMPTY": (1, 1), "ISFILTERED": (1, 1), "KEEPFILTERS": (1, 1), "LOOKUPVALUE": (3, None), "MAX": (1, 2), "MAXX": (2, 2),
          "MIN": (1, 2), "MINX": (2, 2), "NOT": (1, 1), "REMOVEFILTERS": (0, None), "ROUND": (2, 2),
          "SELECTEDVALUE": (1, 2), "SUM": (1, 1), "SUMX": (2, 2), "SWITCH": (3, None), "TOPN": (2, None),
          "TRUE": (0, 0), "UPPER": (1, 1), "VALUES": (1, 1)}

@@ -5,6 +5,10 @@
     "ressources",
     "fiche_affaire",
     "controle",
+    "pdf_tableau_de_bord_1",
+    "pdf_tableau_de_bord_2",
+    "pdf_ressources_1",
+    "pdf_ressources_2",
     "infobulle_projet",
     "infobulle_occupation"
   ],

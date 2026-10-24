@@ -3,8 +3,68 @@
   "name": "tableau_de_bord",
   "displayName": "Tableau de bord",
   "displayOption": "FitToWidth",
-  "height": 1866,
+  "height": 1806,
   "width": 1280,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "filtre_periode",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Mois"
+              }
+            },
+            "Property": "Période"
+          }
+        },
+        "type": "Categorical",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "m",
+              "Entity": "Mois",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "m"
+                          }
+                        },
+                        "Property": "Période"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'12 mois du Dashboard Excel'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "ordinal": 0
+      }
+    ],
+    "filterSortOrder": "Custom"
+  },
   "objects": {
     "background": [
       {
@@ -54,12 +114,5 @@
         }
       }
     ]
-  },
-  "visualInteractions": [
-    {
-      "source": "bd214b25bcdef1281fbf",
-      "target": "24b64be97252a82e271e",
-      "type": "NoFilter"
-    }
-  ]
+  }
 }

@@ -3829,6 +3829,24 @@
             "description": "Date et heure de l'actualisation (heure de Paris)."
           },
           {
+            "name": "Filtres appliqués",
+            "expression": [
+              "VAR _c = IF ( ISFILTERED ( Lignes[Chef de projet] ), \"Chef de projet : \"",
+              "    & CONCATENATEX ( VALUES ( Lignes[Chef de projet] ), Lignes[Chef de projet], \", \", Lignes[Chef de projet], ASC ) )",
+              "VAR _p = IF ( ISFILTERED ( Lignes[Projet] ), \"Projet : \"",
+              "    & CONCATENATEX ( VALUES ( Lignes[Projet] ), Lignes[Projet], \", \", Lignes[Projet], ASC ) )",
+              "VAR _t = IF ( ISFILTERED ( Lignes[Type] ), \"Type : \"",
+              "    & CONCATENATEX ( VALUES ( Lignes[Type] ), Lignes[Type], \", \", Lignes[Type], ASC ) )",
+              "RETURN",
+              "    IF ( _c & _p & _t = \"\", \"Toutes les affaires du périmètre\",",
+              "        _c & IF ( _c <> \"\" && _p <> \"\", \"  ·  \" ) & _p",
+              "            & IF ( ( _c <> \"\" || _p <> \"\" ) && _t <> \"\", \"  ·  \" ) & _t )"
+            ],
+            "lineageTag": "14eae226-fc75-540a-a1b1-86e1bf811991",
+            "displayFolder": "Textes",
+            "description": "Chef de projet, projet et type choisis dans les segments (en-tête des pages PDF), ou « Toutes les affaires du périmètre »."
+          },
+          {
             "name": "Titre du périmètre",
             "expression": "IF ( [Périmètre en vigueur] = \"Tous les projets\", \"TOUS LES PROJETS\", \"PROJETS EN COURS\" )",
             "lineageTag": "7271c424-1831-5fbd-8282-f3e343eda329",

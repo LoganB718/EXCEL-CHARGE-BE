@@ -88,16 +88,14 @@ OneDrive synchronisé.
 ## 6. Utiliser le rapport
 
 - **Tableau de bord** (onglet Dashboard) : cartes, indicateurs, charge par mois et par projet, liste des affaires.
-- **Ressources** (onglet Dessinateurs) : occupation de toute l'équipe mois par mois (vert < 90 %, orange 90-100 %,
-  rouge > 100 %), puis le détail de la ressource choisie dans la liste « Ressource ».
-- Segments **Périmètre** et **Répartition mensuelle** : « **Comme dans Excel** » applique les réglages enregistrés
-  dans le Dashboard du classeur ; les autres choix permettent de comparer sans toucher au classeur. Ils sont
-  communs à toutes les pages.
-- Segment **Période** : « 12 mois du Dashboard Excel » = les mêmes 12 mois que l'Excel. Pour voir d'autres mois,
-  **désélectionner d'abord** « 12 mois du Dashboard Excel » (ou cocher aussi « Avant » / « Après ») ; régler
-  ensuite, si besoin, **Plage de mois** : les deux segments se cumulent, la plage seule ne fait pas sortir des
-  12 mois. Les bornes de la plage sont des 1ers du mois (une borne au 15 exclut le mois de cette date).
-  Chef de projet, Projet, Type d'affaire filtrent la page.
+- **Ressources** (onglet Dessinateurs) : en tête, la ressource choisie dans la liste « Ressource » et son
+  détail ; plus bas, l'occupation de toute l'équipe mois par mois (vert < 90 %, orange 90-100 %, rouge > 100 %).
+- **Réglages** : le rapport applique toujours les réglages enregistrés dans le Dashboard du classeur (périmètre,
+  répartition mensuelle) et ses 12 mois. Ils ne sont pas affichés en segments, pour que le rapport reste lisible
+  par quelqu'un qui ne connaît pas le classeur. Pour comparer sans toucher au classeur : ouvrir le volet
+  **Filtres** (à droite, replié) et changer « Périmètre », « Répartition » (filtres de tout le rapport) ou
+  « Période » (filtre de la page : cocher aussi « Avant » / « Après » pour voir d'autres mois).
+- **Chef de projet, Projet, Type d'affaire** (en haut du tableau de bord) filtrent la page, et aussi les pages PDF.
 - Cliquer sur une barre, une part ou une ligne filtre les autres visuels ; cliquer à nouveau pour annuler.
   Les numéros 1 à 9 des couleurs renvoient au tableau des projets ; survoler une colonne affiche le projet.
 - **Fiche affaire** : clic droit sur une affaire (tableau des affaires ou lignes d'une ressource) >
@@ -108,6 +106,15 @@ OneDrive synchronisé.
 - **Boutons** (« Ressources › », « Contrôle › », « Ouvrir la fiche de l'affaire », « ‹ Retour ») : dans
   **Power BI Desktop**, maintenir **Ctrl** en cliquant (un clic simple ne fait que sélectionner le bouton) ; dans
   le navigateur et l'application, un clic suffit.
+- **Pages PDF** (« PDF – Tableau de bord (1/2) et (2/2) », « PDF – Ressources (1/2) et (2/2) ») : pages au format
+  A4 paysage faites pour l'impression. Elles reprennent la sélection faite à l'écran (chef, projet, type sur le
+  tableau de bord ; ressource choisie sur la page Ressources) et l'indiquent dans leur bandeau. La liste des
+  affaires du PDF s'arrête aux **30 premières** (par charge décroissante) ; le nombre total est rappelé en bas.
+  - Dans le navigateur ou l'application : ouvrir la page PDF voulue, **Exporter > PDF**, cocher
+    « Exporter uniquement la page actuelle » (une page à la fois), ou exporter tout le rapport puis ne garder que
+    les pages PDF.
+  - Dans Power BI Desktop : **Fichier > Exporter > Exporter au format PDF** exporte toutes les pages visibles ;
+    garder les pages « PDF – … » (ou masquer temporairement les autres pages avant l'export).
 - **Contrôle** : compare Power BI (réglages du classeur, 12 mois du Dashboard) aux valeurs de l'onglet Calculs.
   ✔ = identique, ✘ = écart.
 
@@ -118,7 +125,7 @@ OneDrive synchronisé.
 | « Accès refusé », « Informations d'identification non valides », erreur 401 / 403 | Desktop : **Fichier > Options et paramètres > Paramètres de la source de données**, sélectionner le site SharePoint, **Modifier les autorisations** > **Modifier** > Compte d'organisation > Se connecter (ou **Effacer les autorisations** puis actualiser). Service : refaire le § 4.3. Vérifier qu'on a bien accès au fichier dans Teams. |
 | Erreur 404, « fichier introuvable », « DataSource.Error » | Le chemin `UrlFichier` est faux : refaire le § 2 (pas de lien de partage, pas de `?web=1`). Le fichier a peut-être été renommé ou déplacé. |
 | « Le classeur ne contient pas le nom défini bi_… » | Le classeur déposé est une ancienne version, ou un nom défini a été supprimé : redéposer le classeur produit par le générateur à jour (`scripts/build_dashboard.py`), puis actualiser. |
-| Valeurs différentes de l'Excel | Vérifier que les segments sont sur « Comme dans Excel » et « 12 mois du Dashboard Excel ». Enregistrer le classeur dans Excel, attendre la synchronisation, puis actualiser. Regarder la page **Contrôle**. |
+| Valeurs différentes de l'Excel | Vérifier dans le volet Filtres que Périmètre et Répartition sont sur « Comme dans Excel » et Période sur « 12 mois du Dashboard Excel ». Enregistrer le classeur dans Excel, attendre la synchronisation, puis actualiser. Regarder la page **Contrôle**. |
 | Affaires en retard différentes de l'Excel | Normal si le classeur a été enregistré un autre jour : Excel compte les retards à la date de son dernier enregistrement, Power BI à la date de l'actualisation (heure de Paris). |
 | Le rapport ne bouge pas après une saisie | Le classeur n'a pas été enregistré, ou il n'y a pas encore eu d'actualisation : enregistrer, puis **Actualiser maintenant**. |
 | Visuels vides à l'ouverture dans Desktop | Normal la première fois : renseigner `UrlFichier` et actualiser (§ 3). |

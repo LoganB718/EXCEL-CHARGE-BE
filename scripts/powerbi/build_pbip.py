@@ -58,12 +58,17 @@ UTILE = LARGEUR - 2 * M
 BANDEAU_H = 92
 
 # Synchronisation des segments entre les pages
-SYNC_PERIM, SYNC_REPART, SYNC_PERIODE, SYNC_PLAGE = "sync_perimetre", "sync_repartition", "sync_periode", "sync_plage"
+SYNC_CHEF, SYNC_PROJET, SYNC_TYPE, SYNC_RES = "sync_chef", "sync_projet", "sync_type", "sync_ressource"
 EXCEL = "Comme dans Excel"
 PERIODE_EXCEL = "12 mois du Dashboard Excel"
 
 P_TDB, P_RES, P_FICHE, P_CTRL = "tableau_de_bord", "ressources", "fiche_affaire", "controle"
 P_IB_PROJET, P_IB_OCC = "infobulle_projet", "infobulle_occupation"
+# Pages à imprimer : A4 paysage (1280 × 905 = rapport 1,414), une page du rapport = une page du PDF
+P_PDF_TDB1, P_PDF_TDB2, P_PDF_RES1, P_PDF_RES2 = "pdf_tableau_de_bord_1", "pdf_tableau_de_bord_2", "pdf_ressources_1", \
+    "pdf_ressources_2"
+HAUT_PDF, BANDEAU_PDF = 905, 74
+N_AFFAIRES_PDF = 30
 
 
 # ---------------------------------------------------------------------------------------------- outils
@@ -232,35 +237,30 @@ def bandeau(p, titre, sous_titre_txt, cle="bandeau", ligne3=None, droite=None, b
                          cle="%s_nav%d" % (cle, i)))
 
 
-def segments_communs(p, y, x0=M, h=112, avec_periode=True, mode="Basic"):
-    """Segments Périmètre, Répartition (sélection unique, « Comme dans Excel ») et Période, synchronisés."""
-    x = x0
-    w_p, w_r, w_t = (184, 232, 220) if mode == "Basic" else (260, 300, 260)
-    p.ajouter(segment(col("Périmètre", "Périmètre"), x, y, w_p, h, titre="Périmètre", mode=mode,
-                      selection_unique=True, valeur_initiale=EXCEL, groupe_sync=SYNC_PERIM, cle="seg_perimetre",
-                      aide="« Comme dans Excel » applique le réglage enregistré dans le classeur."))
-    x += w_p + G
-    p.ajouter(segment(col("Répartition", "Répartition"), x, y, w_r, h, titre="Répartition mensuelle", mode=mode,
-                      selection_unique=True, valeur_initiale=EXCEL, groupe_sync=SYNC_REPART, cle="seg_repartition",
-                      aide="Lissée : heures réparties en jours ouvrés du début planifié à la date de besoin. "
-                           "Tout sur le mois de début : toute la charge sur le mois du début planifié."))
-    x += w_r + G
-    if avec_periode:
-        p.ajouter(segment(col("Mois", "Période"), x, y, w_t, h, titre="Période", mode=mode,
-                          valeur_initiale=PERIODE_EXCEL, groupe_sync=SYNC_PERIODE, cle="seg_periode",
-                          aide="« 12 mois du Dashboard Excel » = les 12 mois affichés par l'Excel. Pour voir d'autres "
-                               "mois, désélectionner d'abord cette valeur (ou cocher aussi Avant / Après), puis régler "
-                               "au besoin la Plage de mois."))
-        x += w_t + G
-    return x
+def filtres_reglages():
+    """Périmètre et répartition « Comme dans Excel » : filtres du rapport (volet Filtres, replié), pas de segment
+    visible : le lecteur du rapport n'a pas à connaître ces réglages internes."""
+    return [filtre_categoriel(col("Périmètre", "Périmètre"), [EXCEL], selection_unique=True, nom="filtre_perimetre"),
+            filtre_categoriel(col("Répartition", "Répartition"), [EXCEL], selection_unique=True,
+                              nom="filtre_repartition")]
 
 
-def plage_mois(x, y, w, h=56):
-    v = segment_dates(col("Mois", "Mois"), x, y, w, h, titre="Plage de mois", groupe_sync=SYNC_PLAGE,
-                      cle="seg_plage", aide="Restreint les mois affichés, en plus du segment Période (les deux "
-                                            "filtres se cumulent). Bornes = 1er du mois.")
-    v.objet("slider", {"show": False})
-    return v
+def filtre_periode():
+    """Les 12 mois du Dashboard Excel (filtre de page, modifiable dans le volet Filtres)."""
+    return filtre_categoriel(col("Mois", "Période"), [PERIODE_EXCEL], nom="filtre_periode")
+
+
+def segments_filtres(p, y, masque=False, h=52):
+    """Segments Chef de projet, Projet, Type d'affaire (listes déroulantes) synchronisés entre les pages ;
+    masque : copie invisible (pages PDF) qui applique la sélection faite à l'écran."""
+    w3 = (UTILE - 2 * G) / 3
+    for k, (colonne, titre, groupe, cle) in enumerate((("Chef de projet", "Chef de projet", SYNC_CHEF, "seg_chef"),
+                                                        ("Projet", "Projet", SYNC_PROJET, "seg_projet"),
+                                                        ("Type", "Type d'affaire", SYNC_TYPE, "seg_type"))):
+        v = p.ajouter(segment(col("Lignes", colonne), M + k * (w3 + G), y, w3, h, titre=titre, mode="Dropdown",
+                              groupe_sync=groupe, cle=cle))
+        v.masque = masque
+    return y + h
 
 
 def tuile(p, xw, y, h, cle, titre, champ, sous1, sous2, couleur_val=None, accent=ACCENT, taille=22, aide=None,
@@ -272,19 +272,21 @@ def tuile(p, xw, y, h, cle, titre, champ, sous1, sous2, couleur_val=None, accent
     p.ajouter(rectangle(x, y, w, 4, cle + "_accent", remplissage=accent, contour=None))
     p.ajouter(ligne_texte(titre, x + 8, y + 10, w - 16, 20, cle + "_titre", taille=9, gras=True,
                           alignement_txt="center"))
-    v = p.ajouter(valeur(champ, x + 8, y + 32, w - 16, 40, cle + "_valeur", taille=taille, couleur_txt=NAVY,
+    compact = h < 116           # tuiles des pages PDF
+    y_val, h_val, y_sous, pas = (30, 34, 64, 19) if compact else (32, 40, 74, 22)
+    v = p.ajouter(valeur(champ, x + 8, y + y_val, w - 16, h_val, cle + "_valeur", taille=taille, couleur_txt=NAVY,
                          gras=True, aide=aide))
     if couleur_val is not None:
         couleur_valeur_carte(v, couleur_val)
     for i, s in enumerate((sous1, sous2)):
-        yy = y + 74 + 22 * i
+        yy = y + y_sous + pas * i
         if s is None:
             continue
         if isinstance(s, str):
-            p.ajouter(ligne_texte(s, x + 8, yy, w - 16, 20, "%s_sous%d" % (cle, i), taille=8.5,
+            p.ajouter(ligne_texte(s, x + 8, yy, w - 16, pas - 2, "%s_sous%d" % (cle, i), taille=8.5,
                                   alignement_txt="center"))
         else:
-            vs = p.ajouter(valeur(s, x + 8, yy, w - 16, 20, "%s_sous%d" % (cle, i), taille=8.5))
+            vs = p.ajouter(valeur(s, x + 8, yy, w - 16, pas - 2, "%s_sous%d" % (cle, i), taille=8.5))
             if couleurs_sous[i] is not None:
                 couleur_valeur_carte(vs, couleurs_sous[i])
     return v
@@ -314,40 +316,19 @@ def tableau_projets(x, y, w, h, cle, avec_part=True, titre=None):
 
 
 # ---------------------------------------------------------------------------------------------- page 1
-def page_tableau_de_bord(r):
-    p = r.page("Tableau de bord", nom=P_TDB, largeur=LARGEUR, hauteur=1866, fond=BG, papier_peint=BG)
-    bandeau(p, "Plan de charge du bureau d'études",
-            "Synthèse de l'onglet Charge du classeur Excel : saisir dans Charge et Data, enregistrer le classeur, "
-            "puis actualiser le rapport.",
-            ligne3=m("Rappel des réglages"),
-            droite=[(m("Période affichée"), 12, "FFFFFF", True), (m("Données lues le"), 9, BANDEAU_TXT, False)],
-            boutons=[("Ressources ›", P_RES), ("Contrôle ›", P_CTRL)])
-
-    # --- segments
-    y = BANDEAU_H + 12
-    x = segments_communs(p, y)
-    w2 = (LARGEUR - M - x - G) / 2
-    p.ajouter(segment(col("Lignes", "Chef de projet"), x, y, w2, 52, titre="Chef de projet", mode="Dropdown",
-                      cle="seg_chef"))
-    p.ajouter(segment(col("Lignes", "Projet"), x + w2 + G, y, w2, 52, titre="Projet", mode="Dropdown",
-                      cle="seg_projet"))
-    p.ajouter(segment(col("Lignes", "Type"), x, y + 60, w2, 52, titre="Type d'affaire", mode="Dropdown",
-                      cle="seg_type"))
-    p.ajouter(plage_mois(x + w2 + G, y + 60, w2, 52))
-
-    # --- section 1 : cartes
-    y = BANDEAU_H + 12 + 112 + 16
+def bloc_cartes(p, y, H=284, alerte=True):
+    """Section 1 : titre du périmètre et les quatre cartes (chefs, programmes, charge, plus gros reste)."""
     section(p, m("Titre du périmètre"), y, "s1")
-    p.ajouter(ligne_texte("Lignes de Charge à corriger (dessinateur ET ressource externe) :", 780, y, 420, 26,
-                          "s1_alerte_txt", taille=9, gras=True, alignement_txt="right"))
-    v = p.ajouter(valeur(m("Lignes avec dessinateur et externe"), 1204, y, 60, 26, "s1_alerte_val", taille=12,
-                         gras=True, couleur_txt=GREEN,
-                         aide="Une ligne de l'onglet Charge = une ressource : seule la colonne K (dessinateur) "
-                              "est comptée quand K et L sont remplies."))
-    couleur_valeur_carte(v, regle((condition(m("Lignes avec dessinateur et externe"), ">", 0.0), RED),
-                                  (condition(m("Lignes avec dessinateur et externe"), "<=", 0.0), GREEN)))
+    if alerte:
+        p.ajouter(ligne_texte("Lignes de Charge à corriger (dessinateur ET ressource externe) :", 780, y, 420, 26,
+                              "s1_alerte_txt", taille=9, gras=True, alignement_txt="right"))
+        v = p.ajouter(valeur(m("Lignes avec dessinateur et externe"), 1204, y, 60, 26, "s1_alerte_val", taille=12,
+                             gras=True, couleur_txt=GREEN,
+                             aide="Une ligne de l'onglet Charge = une ressource : seule la colonne K (dessinateur) "
+                                  "est comptée quand K et L sont remplies."))
+        couleur_valeur_carte(v, regle((condition(m("Lignes avec dessinateur et externe"), ">", 0.0), RED),
+                                      (condition(m("Lignes avec dessinateur et externe"), "<=", 0.0), GREEN)))
     y += 36
-    H = 284
     cartes = grille(4)
     # carte 1 : chefs de projet
     x, w = cartes[0]
@@ -418,11 +399,12 @@ def page_tableau_de_bord(r):
                             couleurs={len(details) - 1: regle((condition(retard, ">", 0.0), "F97066"),
                                                               (condition(retard, "<=", 0.0), "FFFFFF"))}))
 
-    # --- section 2 : indicateurs clés
-    y += H + 16
+    return y + H
+
+def bloc_indicateurs(p, y, TH=120):
+    """Section 2 : les cinq tuiles d'indicateurs."""
     y = section(p, "INDICATEURS CLÉS", y, "s2")
     tuiles = grille(5)
-    TH = 120
     tuile(p, tuiles[0], y, TH, "t1", "MOIS EN SURCHARGE", m("Mois en surcharge"), m("Sous-titre capacité"),
           m("Sous-titre surcharge"), couleur_val=rouge_si_positif(m("Mois en surcharge")),
           aide="Mois où la charge répartie (arrondie) dépasse la capacité projets de l'équipe (arrondie).")
@@ -437,10 +419,11 @@ def page_tableau_de_bord(r):
     tuile(p, tuiles[4], y, TH, "t5", "TAUX D'AVANCEMENT MOYEN", m("Avancement moyen pondéré"),
           "pondéré par les heures des affaires", m("Sous-titre avancement"))
 
-    # --- section 3 : graphiques
-    y += TH + 16
+    return y + TH
+
+def bloc_graphiques(p, y, GH=392):
+    """Section 3 : histogramme mensuel par projet + capacité, anneau et tableau des projets."""
     y = section(p, "RÉPARTITION DE LA CHARGE", y, "s3")
-    GH = 392
     wl = 724
     p.ajouter(rectangle(M, y, wl, GH, "g1_fond"))
     v = p.ajouter(graphique_combo(
@@ -466,39 +449,58 @@ def page_tableau_de_bord(r):
     p.ajouter(rectangle(xr, y, wr, GH, "g2_fond"))
     p.ajouter(ligne_texte("Répartition de la charge par projet", xr + 8, y + 8, wr - 16, 24, "g2_titre", taille=11,
                           couleur_txt=NAVY, gras=True))
-    p.ajouter(anneau(col("Lignes", "Ordre groupe projet"), m("Charge identifiée (h)"), xr + 8, y + 40, 220, 296,
+    p.ajouter(anneau(col("Lignes", "Ordre groupe projet"), m("Charge identifiée (h)"), xr + 8, y + 40, 220, GH - 96,
                      couleurs={Entier(k + 1): c for k, c in enumerate(SLOT_COLORS)},
                      style_etiquettes="Percent of total", position_etiquettes="preferOutside", legende=False,
                      total=m("Charge identifiée (h)"), libelle_total="h au total", fond=False,
                      page_infobulle=P_IB_PROJET, cle="g2_anneau",
                      texte_alt="Part de chaque projet dans la charge identifiée ; total au centre"))
     props_sans_selecteur(_par_cle(p, "g2_anneau"), "labels", {"percentageLabelPrecision": Entier(0)})
-    p.ajouter(tableau_projets(xr + 228, y + 44, wr - 236, 292, "g2_legende"))
+    p.ajouter(tableau_projets(xr + 228, y + 44, wr - 236, GH - 100, "g2_legende"))
     p.ajouter(texte([paragraphe(dict(texte="Total au centre · une couleur par projet, commune aux deux graphiques "
                                      "(n° 1 à 9) · au-delà de 9 projets, « Autres projets » en gris.",
                                      taille=8.5, couleur=GREY, italique=True))],
                     xr + 8, y + GH - 44, wr - 16, 36, "g2_note"))
 
-    # --- section 4 : liste des affaires
-    y += GH + 16
-    p.ajouter(bouton("Ouvrir la fiche de l'affaire", LARGEUR - M - 220, y - 2, 220, 26, action="Drillthrough",
-                     page_cible=P_FICHE, remplissage=ACCENT, taille_texte=9, arrondi=4,
-                     info="Sélectionner une affaire dans le tableau, puis cliquer (Ctrl + clic dans Power BI "
-                          "Desktop), ou clic droit sur l'affaire > Extraire",
-                     fond=False, cle="s4_extraction"))
-    y = section(p, "LISTE DES AFFAIRES (un sous-projet par ligne, toutes ressources regroupées, par charge "
-                   "décroissante)", y, "s4")
-    p.ajouter(tableau_affaires(M, y, UTILE, 468))
+    return y + GH
 
-    # --- notes
-    y += 468 + 16
+def bloc_liste_affaires(p, y, h=468, bouton_fiche=True, n_max=None, titre_section=None, taille_texte=None):
+    """Section 4 : tableau des affaires (n_max : n° d'affaire maximal affiché, pour le PDF)."""
+    if bouton_fiche:
+        p.ajouter(bouton("Ouvrir la fiche de l'affaire", LARGEUR - M - 220, y - 2, 220, 26, action="Drillthrough",
+                         page_cible=P_FICHE, remplissage=ACCENT, taille_texte=9, arrondi=4,
+                         info="Sélectionner une affaire dans le tableau, puis cliquer (Ctrl + clic dans Power BI "
+                              "Desktop), ou clic droit sur l'affaire > Extraire",
+                         fond=False, cle="s4_extraction"))
+    y = section(p, titre_section or "LISTE DES AFFAIRES (un sous-projet par ligne, toutes ressources regroupées, "
+                   "par charge décroissante)", y, "s4")
+    p.ajouter(tableau_affaires(M, y, UTILE, h, n_max=n_max, taille_texte=taille_texte))
+    return y + h
+
+
+
+def page_tableau_de_bord(r):
+    p = r.page("Tableau de bord", nom=P_TDB, largeur=LARGEUR, hauteur=1806, fond=BG, papier_peint=BG,
+               filtres=[filtre_periode()])
+    bandeau(p, "Plan de charge du bureau d'études",
+            "Synthèse de l'onglet Charge du classeur Excel : saisir dans Charge et Data, enregistrer le classeur, "
+            "puis actualiser le rapport.",
+            ligne3=m("Rappel des réglages"),
+            droite=[(m("Période affichée"), 12, "FFFFFF", True), (m("Données lues le"), 9, BANDEAU_TXT, False)],
+            boutons=[("Ressources ›", P_RES), ("Contrôle ›", P_CTRL)])
+
+    y = segments_filtres(p, BANDEAU_H + 12) + 16
+    y = bloc_cartes(p, y) + 16
+    y = bloc_indicateurs(p, y) + 16
+    y = bloc_graphiques(p, y) + 16
+    y = bloc_liste_affaires(p, y) + 16
     notes = [
         "Affaire = un sous-projet (projet + sous-projet + produit) : ses lignes de l'onglet Charge sont additionnées ; "
         "chef = celui de sa 1re ligne ; avancement = toutes ses lignes pondérées par leurs heures ; reste à faire = "
         "heures × (1 − avancement).",
         "Périmètre « Projets en cours » = lignes dont l'avancement (colonne O) est inférieur à 100 % : une ressource "
-        "qui a terminé sa part sort du périmètre, même si d'autres continuent l'affaire. « Comme dans Excel » applique "
-        "les réglages enregistrés dans le classeur.",
+        "qui a terminé sa part sort du périmètre, même si d'autres continuent l'affaire. Périmètre, répartition et "
+        "période sont ceux enregistrés dans le classeur (volet Filtres pour les changer).",
         "Charge par mois : heures (M) réparties au prorata des jours ouvrés (lundi au vendredi, hors jours non "
         "travaillés de l'onglet Data) entre le début planifié (N) et la date de besoin (F) ; sans date de besoin "
         "valable, tout va sur le mois de début.",
@@ -511,7 +513,6 @@ def page_tableau_de_bord(r):
         "à la dernière actualisation.",
     ]
     p.ajouter(notes_lecture(notes, M, y, UTILE, 150, "notes"))
-    periode_sans_effet_sur_plage(p)
     return p
 
 
@@ -546,7 +547,7 @@ def fiche_valeurs(champs, x, y, w, h, cle, titre=None, fond_cellules="FFFFFF", t
     return visuels
 
 
-def tableau_affaires(x, y, w, h):
+def tableau_affaires(x, y, w, h, n_max=None, taille_texte=None):
     A = "Affaires"
     coul = m("Couleur avancement")
     cols = [
@@ -564,34 +565,20 @@ def tableau_affaires(x, y, w, h):
     ]
     v = tableau(cols, x, y, w, h, titre="Affaires du périmètre (clic droit sur une ligne > Extraire > Fiche affaire)",
                 tri=[(col(A, "N°"), "Ascending")], cle="tableau_affaires",
+                **({} if taille_texte is None else {"taille_texte": taille_texte}),
                 aide="Une ligne par affaire. Charge et % : lignes de l'affaire dans le périmètre. Avancement et reste "
                      "à faire : toutes les lignes de l'affaire. Rouge : affaire en retard.")
     barres_donnees(v, col(A, "% de la charge totale"), "86B6EF")
     barres_donnees(v, col(A, "Avancement"), "7FD1AE", maximum=1)
+    if n_max is not None:       # page PDF : les n_max premières affaires (n° = rang par charge décroissante)
+        v.filtres.append(filtre_avance(col(A, "N°"), filtre_comparaison(col(A, "N°"), "<=", int(n_max)),
+                                       nom="tableau_affaires_n_max", masque=True))
     return v
 
 
 # ---------------------------------------------------------------------------------------------- page 2
-def page_ressources(r):
-    p = r.page("Ressources", nom=P_RES, largeur=LARGEUR, hauteur=2034, fond=BG, papier_peint=BG)
-    bandeau(p, "Charge par ressource (dessinateurs et externes)",
-            "Charge fixe hors projet + heures de ses lignes dans l'onglet Charge, comparées à la capacité mensuelle "
-            "de la personne.",
-            ligne3=m("Rappel des réglages"),
-            droite=[(m("Période affichée"), 12, "FFFFFF", True), (m("Données lues le"), 9, BANDEAU_TXT, False)],
-            boutons=[("Tableau de bord ›", P_TDB), ("Contrôle ›", P_CTRL)])
-    y = BANDEAU_H + 12
-    x = segments_communs(p, y)
-    p.ajouter(plage_mois(x, y, 300, 56))
-    p.ajouter(texte([
-        paragraphe(dict(texte="Occupation = (charge fixe + heures de la ressource, arrondi à l'heure) ÷ capacité "
-                              "mensuelle.", taille=8.5, couleur=GREY, italique=True)),
-        paragraphe(dict(texte="Choisir la ressource plus bas pour son détail ; le tableau d'occupation montre toute "
-                              "l'équipe.", taille=8.5, couleur=GREY, italique=True)),
-    ], x, y + 64, LARGEUR - M - x, 48, "aide_haut"))
-
-    # --- occupation de l'équipe
-    y = BANDEAU_H + 12 + 112 + 16
+def bloc_occupation(p, y, HH=330):
+    """Occupation de l'équipe : carte de chaleur ressources × mois et heures non affectées."""
     y = section(p, "OCCUPATION DE L'ÉQUIPE (charge fixe + projets, en % de la capacité)", y, "s1")
     p.ajouter(texte([paragraphe(
         dict(texte="■ ", couleur="1E7B34", taille=10), dict(texte="Vert : moins de 90 %     ", taille=8.5, couleur=GREY),
@@ -603,7 +590,7 @@ def page_ressources(r):
     y += 26
     occ = m("Occupation (%)")
     heat = matrice([col("Ressources", "Ressource (avec mention)")], [col("Mois", "Libellé mois")], [occ], M, y, UTILE,
-                   330,
+                   HH,
                    titre="Occupation par ressource et par mois", couleur_fond=m("Couleur de fond (occupation)"),
                    couleur_police=m("Couleur du texte (occupation)"), totaux_colonnes=True,
                    largeurs={col("Ressources", "Ressource (avec mention)"): 180}, cle="carte_chaleur",
@@ -616,23 +603,34 @@ def page_ressources(r):
     props_sans_selecteur(heat, "subTotals", {"columnSubtotalsLabel": "Moyenne"})
     props_sans_selecteur(heat, "values", {"bold": True})
     p.ajouter(heat)
-    y += 330 + 12
+    y += HH + 12
     na = matrice([col("Ressources", "Ressource")], [col("Mois", "Libellé mois")], [m("Charge répartie (h)")],
                  M, y, UTILE, 84, titre="Heures non affectées à une ressource (lignes sans dessinateur ni externe)",
                  largeurs={col("Ressources", "Ressource"): 180}, cle="non_affecte",
                  filtres=[filtre_categoriel(col("Ressources", "Type de ressource"), ["Non affecté"], masque=True,
                                             nom="filtre_non_affecte")])
     p.ajouter(na)
-    y += 84 + 16
+    return y + 84, heat, na
 
-    # --- ressource choisie
+
+
+def bloc_choix_ressource(p, y, masque_segment=False):
+    """Section « ressource choisie » : segment Ressource (synchronisé) et caractéristiques de la ressource ;
+    masque_segment : copie invisible du segment (page PDF), le nom de la ressource est alors affiché."""
     y = section(p, "RESSOURCE CHOISIE", y, "s2")
     seg_res = p.ajouter(segment(col("Ressources", "Ressource"), M, y, 300, 56, titre="Ressource", mode="Dropdown",
-                                selection_unique=True, cle="seg_ressource",
+                                selection_unique=True, cle="seg_ressource", groupe_sync=SYNC_RES,
                                 aide="Dessinateurs (Data E) puis ressources externes (Data H).",
                                 filtres=[filtre_categoriel(col("Ressources", "Type de ressource"),
                                                            ["Interne", "Externe", "Hors liste"], masque=True,
                                                            nom="filtre_seg_ressource")]))
+    seg_res.masque = masque_segment
+    if masque_segment:
+        p.ajouter(rectangle(M, y, 300, 56, "nom_ressource_fond"))
+        p.ajouter(ligne_texte("Ressource", M + 4, y + 4, 292, 18, "nom_ressource_lib", taille=9, gras=True,
+                              couleur_txt=INK))
+        p.ajouter(texte_mesure(col("Ressources", "Ressource"), M + 8, y + 24, 288, 28, "nom_ressource", taille=13,
+                               couleur_txt=NAVY, gras=True))
     xi, wi = M + 300 + G, UTILE - 300 - G
     p.ajouter(rectangle(xi, y, wi, 56, "info_fond"))
     p.ajouter(rectangle(xi, y, 4, 56, "info_accent", remplissage=ACCENT, contour=None))
@@ -646,9 +644,13 @@ def page_ressources(r):
         p.ajouter(valeur(m(n), xk, y + 4, wk - 8, 48, "info_ressource%d" % i_info, taille=11, couleur_txt=NAVY,
                          gras=True, etiquette=lib))
         xk += wk
-    y += 56 + 12
+    return y + 56, seg_res
+
+
+def bloc_detail_ressource(p, y, TH=120, CH=330, TABH=196):
+    """Tuiles, graphique mensuel et tableau mensuel de la ressource choisie."""
     tuiles = grille(5)
-    TH = 120
+    occ = m("Occupation (%)")
     # « Attention : charge fixe ≥ capacité » en rouge (capacité projets = max(0, capacité - charge fixe) = 0)
     cap_proj = m("Capacité projets de la ressource (h/mois)")
     tuile(p, tuiles[0], y, TH, "t1", "CAPACITÉ MENSUELLE (H)", m("Capacité de la ressource (h/mois)"),
@@ -673,7 +675,7 @@ def page_ressources(r):
     combo = graphique_combo(
         col("Mois", "Libellé mois"),
         [m("Charge fixe (h)"), m("Projets dans la capacité (h)"), m("Dépassement de capacité (h)")],
-        M, y, UTILE, 330, lignes=[m("Capacité de la ressource (h/mois)")], titre="Charge mensuelle (heures)",
+        M, y, UTILE, CH, lignes=[m("Capacité de la ressource (h/mois)")], titre="Charge mensuelle (heures)",
         couleurs_lignes={"Capacité de la ressource (h/mois)": CAP_C}, legende="Top", cle="combo_ressource",
         infobulles=[m("Charge totale de la ressource (h)"), occ],
         texte_alt="Charge mensuelle de la ressource choisie : charge fixe, projets dans la capacité, dépassement, "
@@ -691,13 +693,13 @@ def page_ressources(r):
     titre_dynamique(combo, m("Titre de la ressource"))
     sous_titre(combo, m("Sous-titre graphique mensuel"))
     p.ajouter(combo)
-    y += 330 + 12
+    y += CH + 12
     # tableau mensuel (valeurs en lignes, mois en colonnes), comme sous le graphique de l'Excel
     lignes_tab = [("Charge fixe hors projet", m("Charge fixe (h)")), ("Charge projets", m("Charge répartie (h)")),
                   ("Charge totale", m("Charge totale de la ressource (h)")),
                   ("Capacité", m("Capacité de la ressource (h/mois)")),
                   ("Marge (+) / dépassement (−)", m("Marge de la ressource (h)")), ("Occupation", occ)]
-    tab = matrice([], [col("Mois", "Libellé mois")], [c for _l, c in lignes_tab], M, y, UTILE, 196,
+    tab = matrice([], [col("Mois", "Libellé mois")], [c for _l, c in lignes_tab], M, y, UTILE, TABH,
                   titre="Heures par mois de la ressource choisie", cle="tableau_mensuel")
     for (lib, c), proj in zip(lignes_tab, tab.roles["Values"]):
         proj["displayName"] = lib
@@ -709,14 +711,18 @@ def page_ressources(r):
                     fond=couleur_champ(m("Couleur de fond (occupation)")))
     props_sans_selecteur(tab, "rowHeaders", {"bold": True, "fontColor": couleur(INK)})
     p.ajouter(tab)
-    y += 196 + 16
+    return y + TABH
 
-    # --- affaires de la ressource
-    p.ajouter(bouton("Ouvrir la fiche de l'affaire", LARGEUR - M - 220, y - 2, 220, 26, action="Drillthrough",
-                     page_cible=P_FICHE, remplissage=ACCENT, taille_texte=9, arrondi=4,
-                     info="Sélectionner une ligne dans le tableau, puis cliquer (Ctrl + clic dans Power BI "
-                          "Desktop), ou clic droit sur la ligne > Extraire",
-                     fond=False, cle="s3_extraction"))
+
+
+def bloc_lignes_ressource(p, y, h=300, bouton_fiche=True):
+    """Lignes de l'onglet Charge de la ressource choisie."""
+    if bouton_fiche:
+        p.ajouter(bouton("Ouvrir la fiche de l'affaire", LARGEUR - M - 220, y - 2, 220, 26, action="Drillthrough",
+                         page_cible=P_FICHE, remplissage=ACCENT, taille_texte=9, arrondi=4,
+                         info="Sélectionner une ligne dans le tableau, puis cliquer (Ctrl + clic dans Power BI "
+                              "Desktop), ou clic droit sur la ligne > Extraire",
+                         fond=False, cle="s3_extraction"))
     y = section(p, "AFFAIRES DE LA RESSOURCE (ses lignes de l'onglet Charge, par charge décroissante)", y, "s3")
     L = "Lignes"
     cols = [
@@ -732,13 +738,30 @@ def page_ressources(r):
         ColonneTableau(col(L, "Date de besoin"), 92, "Date de besoin", alignement="Center"),
         ColonneTableau(col(L, "Avancement"), 90, "Avancement"),
     ]
-    aff = tableau(cols, M, y, UTILE, 300, titre="Lignes de la ressource choisie (clic droit > Extraire > Fiche affaire)",
+    aff = tableau(cols, M, y, UTILE, h, titre="Lignes de la ressource choisie (clic droit > Extraire > Fiche affaire)",
                   tri=[(col(L, "Heures (h)"), "Descending")], cle="affaires_ressource")
     aff.objet("columnFormatting", {"labelPrecision": Entier(0)}, sel_metadata(m("Heures de la ligne sur la période (h)")))
     sous_titre(aff, m("Sous-titre lignes de la ressource"))
     barres_donnees(aff, col(L, "Avancement"), "7FD1AE", maximum=1)
     p.ajouter(aff)
-    y += 300 + 16
+    return y + h
+
+
+def page_ressources(r):
+    p = r.page("Ressources", nom=P_RES, largeur=LARGEUR, hauteur=1880, fond=BG, papier_peint=BG,
+               filtres=[filtre_periode()])
+    bandeau(p, "Charge par ressource (dessinateurs et externes)",
+            "Charge fixe hors projet + heures de ses lignes dans l'onglet Charge, comparées à la capacité mensuelle "
+            "de la personne.",
+            ligne3=m("Rappel des réglages"),
+            droite=[(m("Période affichée"), 12, "FFFFFF", True), (m("Données lues le"), 9, BANDEAU_TXT, False)],
+            boutons=[("Tableau de bord ›", P_TDB), ("Contrôle ›", P_CTRL)])
+    # la ressource se choisit en tête de page ; l'occupation de toute l'équipe vient ensuite
+    y, seg_res = bloc_choix_ressource(p, BANDEAU_H + 12)
+    y = bloc_detail_ressource(p, y + 12) + 16
+    y = bloc_lignes_ressource(p, y) + 16
+    y, heat, na = bloc_occupation(p, y)
+    y += 16
     notes = [
         "Charge d'une ressource = charge fixe hors projet + heures des lignes de l'onglet Charge où elle figure "
         "(colonne K pour un dessinateur, L pour une ressource externe), réparties par mois comme sur le tableau de bord.",
@@ -756,13 +779,7 @@ def page_ressources(r):
         for v in p.visuels:
             if v is not source and v.type not in ("shape", "textbox", "actionButton"):
                 p.interaction(source, v, "NoFilter")
-    periode_sans_effet_sur_plage(p)
     return p
-
-
-def periode_sans_effet_sur_plage(p):
-    """Le segment Période ne réduit pas les bornes du segment Plage de mois (les deux filtres restent cumulés)."""
-    p.interaction(_par_cle(p, "seg_periode"), _par_cle(p, "seg_plage"), "NoFilter")
 
 
 def _par_cle(p, cle):
@@ -775,7 +792,7 @@ def _par_cle(p, cle):
 # ---------------------------------------------------------------------------------------------- page 3
 def page_fiche(r):
     A, L = "Affaires", "Lignes"
-    p = r.page("Fiche affaire", nom=P_FICHE, largeur=LARGEUR, hauteur=1186, fond=BG, papier_peint=BG,
+    p = r.page("Fiche affaire", nom=P_FICHE, largeur=LARGEUR, hauteur=1146, fond=BG, papier_peint=BG,
                masquee=True, extraction=[col(A, "Affaire")], garder_tous_filtres=False)
     p.ajouter(forme_rectangle(0, 0, LARGEUR, BANDEAU_H, NAVY, fond=False, cle="bandeau"))
     p.ajouter(ligne_texte("FICHE AFFAIRE", M, 8, 600, 24, "bandeau_titre", taille=11, couleur_txt=AMBER, gras=True))
@@ -788,15 +805,11 @@ def page_fiche(r):
                      taille_texte=10, arrondi=4,
                      info="Revenir à la page précédente (dans Power BI Desktop : Ctrl + clic)", fond=False,
                      cle="retour"))
-    y = BANDEAU_H + 12
-    x = segments_communs(p, y, h=56, avec_periode=False, mode="Dropdown")
-    p.ajouter(texte([
-        paragraphe(dict(texte="Fiche ouverte par clic droit sur une affaire > Extraire > Fiche affaire (tableau de bord "
-                              "ou page Ressources).", taille=8.5, couleur=GREY, italique=True)),
-        paragraphe(dict(texte="Le périmètre et la répartition suivent les segments ; tous les mois de l'affaire sont "
-                              "affichés (sans le filtre de période).", taille=8.5, couleur=GREY, italique=True)),
-    ], x, y, LARGEUR - M - x, 56, "aide"))
-    y += 56 + 16
+    y = BANDEAU_H + 8
+    p.ajouter(ligne_texte("Fiche ouverte par clic droit sur une affaire > Extraire > Fiche affaire (tableau de bord ou "
+                          "page Ressources) ; tous les mois de l'affaire sont affichés.", M, y, UTILE, 20, "aide",
+                          taille=8.5, italique=True))
+    y += 20 + 12
     # tuiles
     tuiles = grille(5)
     TH = 110
@@ -972,6 +985,68 @@ def page_controle(r):
 
 
 # ---------------------------------------------------------------------------------------------- info-bulles
+# ---------------------------------------------------------------------------------------------- pages PDF
+def page_pdf(r, nom_affiche, nom, titre, page_n):
+    """Page A4 paysage à exporter en PDF : bandeau compact (réglages, filtres, période, date de lecture)."""
+    p = r.page(nom_affiche, nom=nom, largeur=LARGEUR, hauteur=HAUT_PDF, affichage="FitToPage", fond="FFFFFF",
+               papier_peint="FFFFFF", filtres=[filtre_periode()])
+    p.ajouter(forme_rectangle(0, 0, LARGEUR, BANDEAU_PDF, NAVY, fond=False, cle="bandeau"))
+    p.ajouter(texte([paragraphe(dict(texte=titre, gras=True, couleur="FFFFFF", taille=17))], M, 4, 820, 32,
+                    "bandeau_titre"))
+    p.ajouter(texte_mesure(m("Rappel des réglages"), M, 36, 820, 18, "bandeau_reglages", couleur_txt=BANDEAU_TXT,
+                           taille=9, gras=True))
+    p.ajouter(texte_mesure(m("Filtres appliqués"), M, 54, 820, 18, "bandeau_filtres", couleur_txt=BANDEAU_TXT,
+                           taille=9))
+    p.ajouter(valeur(m("Période affichée"), 852, 6, 412, 26, "bandeau_periode", taille=12, couleur_txt="FFFFFF",
+                     gras=True))
+    p.ajouter(valeur(m("Données lues le"), 852, 34, 412, 18, "bandeau_lecture", taille=9, couleur_txt=BANDEAU_TXT))
+    p.ajouter(ligne_texte(page_n, 852, 54, 412, 18, "bandeau_page", taille=9, couleur_txt=BANDEAU_TXT,
+                          alignement_txt="right"))
+    return p
+
+
+def segment_ressource_masque(p):
+    """Copie invisible du segment Ressource : la page suit la ressource choisie sur la page Ressources."""
+    v = p.ajouter(segment(col("Ressources", "Ressource"), M, 0, 300, 56, titre="Ressource", mode="Dropdown",
+                          selection_unique=True, cle="seg_ressource", groupe_sync=SYNC_RES))
+    v.masque = True
+    return v
+
+
+def pages_pdf(r):
+    # tableau de bord : synthèse puis liste des affaires
+    p = page_pdf(r, "PDF – Tableau de bord (1/2)", P_PDF_TDB1, "Plan de charge du bureau d'études", "Page 1 / 2")
+    segments_filtres(p, 0, masque=True)
+    y = bloc_cartes(p, BANDEAU_PDF + 8, H=250, alerte=False) + 10
+    y = bloc_indicateurs(p, y, TH=100) + 10
+    bloc_graphiques(p, y, GH=322)
+
+    p = page_pdf(r, "PDF – Tableau de bord (2/2)", P_PDF_TDB2, "Plan de charge du bureau d'études : liste des affaires",
+                 "Page 2 / 2")
+    segments_filtres(p, 0, masque=True)
+    y = bloc_liste_affaires(p, BANDEAU_PDF + 8, h=752, bouton_fiche=False, n_max=N_AFFAIRES_PDF, taille_texte=8.5,
+                            titre_section="LISTE DES AFFAIRES (les %d premières, par charge décroissante)"
+                                          % N_AFFAIRES_PDF)
+    p.ajouter(ligne_texte("Nombre d'affaires du périmètre :", M, y + 6, 230, 20, "total_lib", taille=9, gras=True,
+                          couleur_txt=INK))
+    p.ajouter(texte_mesure(m("Nombre d'affaires"), M + 232, y + 6, 80, 20, "total_val", taille=9, gras=True))
+    p.ajouter(ligne_texte("au-delà de la %de, voir le rapport en ligne." % N_AFFAIRES_PDF, M + 320, y + 6, 600, 20,
+                          "total_note", taille=9, italique=True))
+
+    # ressources : ressource choisie, puis ses lignes et l'occupation de l'équipe
+    p = page_pdf(r, "PDF – Ressources (1/2)", P_PDF_RES1, "Charge par ressource : ressource choisie", "Page 1 / 2")
+    y, _seg = bloc_choix_ressource(p, BANDEAU_PDF + 8, masque_segment=True)
+    bloc_detail_ressource(p, y + 10, TH=104, CH=300, TABH=196)
+
+    p = page_pdf(r, "PDF – Ressources (2/2)", P_PDF_RES2, "Charge par ressource : affaires et occupation de l'équipe",
+                 "Page 2 / 2")
+    seg = segment_ressource_masque(p)
+    y = bloc_lignes_ressource(p, BANDEAU_PDF + 8, h=250, bouton_fiche=False) + 10
+    _y, heat, na = bloc_occupation(p, y, HH=290)
+    for cible in (heat, na):            # l'occupation montre toute l'équipe, comme à l'écran
+        p.interaction(seg, cible, "NoFilter")
+
+
 def page_infobulle_projet(r):
     p = r.page("Info-bulle projet", nom=P_IB_PROJET, largeur=320, hauteur=200, affichage="ActualSize",
                masquee=True, type_page="Tooltip", fond="FFFFFF")
@@ -1022,10 +1097,12 @@ def theme():
 
 def rapport():
     r = RapportPlanDeCharge(NOM, theme=theme(), volet_filtres_deplie=False)
+    r.filtres.extend(filtres_reglages())
     page_tableau_de_bord(r)
     page_ressources(r)
     page_fiche(r)
     page_controle(r)
+    pages_pdf(r)
     page_infobulle_projet(r)
     page_infobulle_occupation(r)
     r.page_active = P_TDB
