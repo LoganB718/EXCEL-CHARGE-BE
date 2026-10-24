@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "PlanDeCharge_BI"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "03fd6208-832c-5445-93ab-c8a96967f721"
+  }
+}

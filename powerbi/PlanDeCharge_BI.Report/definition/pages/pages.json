@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/pagesMetadata/1.0.0/schema.json",
+  "pageOrder": [
+    "tableau_de_bord",
+    "ressources",
+    "fiche_affaire",
+    "controle",
+    "infobulle_projet",
+    "infobulle_occupation"
+  ],
+  "activePageName": "tableau_de_bord"
+}

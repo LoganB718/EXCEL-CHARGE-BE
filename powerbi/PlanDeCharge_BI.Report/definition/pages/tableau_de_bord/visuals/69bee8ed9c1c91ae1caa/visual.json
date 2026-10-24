@@ -1,0 +1,198 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.1.0/schema.json",
+  "name": "69bee8ed9c1c91ae1caa",
+  "position": {
+    "x": 16,
+    "y": 1704,
+    "z": 91000,
+    "height": 150,
+    "width": 1248,
+    "tabOrder": 91000
+  },
+  "visual": {
+    "visualType": "textbox",
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "NOTES DE LECTURE",
+                    "textStyle": {
+                      "fontSize": "8.5pt",
+                      "fontWeight": "bold",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Affaire = un sous-projet (projet + sous-projet + produit) : ses lignes de l'onglet Charge sont additionnées ; chef = celui de sa 1re ligne ; avancement = toutes ses lignes pondérées par leurs heures ; reste à faire = heures × (1 − avancement).",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Périmètre « Projets en cours » = lignes dont l'avancement (colonne O) est inférieur à 100 % : une ressource qui a terminé sa part sort du périmètre, même si d'autres continuent l'affaire. « Comme dans Excel » applique les réglages enregistrés dans le classeur.",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Charge par mois : heures (M) réparties au prorata des jours ouvrés (lundi au vendredi, hors jours non travaillés de l'onglet Data) entre le début planifié (N) et la date de besoin (F) ; sans date de besoin valable, tout va sur le mois de début.",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Affaire en retard (avancement en rouge) : date de besoin dépassée sans être à 100 %, ou avancement inférieur de plus de 15 points à l'avancement attendu. La date du jour est celle de la dernière actualisation.",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Pointillés : capacité projets de l'équipe = somme des (capacité − charge fixe) des ressources des listes Data. ETP = heures ÷ (capacité − charge fixe) d'une personne. Au-delà de 9 projets : « Autres projets » (gris).",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Cliquer sur une barre, une part ou une ligne filtre les autres visuels (cliquer à nouveau pour annuler). Clic droit sur une affaire > Extraire > Fiche affaire. Les chiffres sont ceux du classeur enregistré, lu à la dernière actualisation.",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "dropShadow": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

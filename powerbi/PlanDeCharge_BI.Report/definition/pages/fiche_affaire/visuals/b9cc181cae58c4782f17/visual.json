@@ -1,0 +1,570 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.1.0/schema.json",
+  "name": "b9cc181cae58c4782f17",
+  "position": {
+    "x": 16,
+    "y": 302,
+    "z": 34000,
+    "height": 300,
+    "width": 400,
+    "tabOrder": 34000
+  },
+  "visual": {
+    "visualType": "pivotTable",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Projet"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Projet)",
+              "nativeQueryRef": "Projet",
+              "displayName": "Projet"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Sous-projet"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Sous-projet)",
+              "nativeQueryRef": "Sous-projet",
+              "displayName": "Sous-projet"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Produit"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Produit)",
+              "nativeQueryRef": "Produit",
+              "displayName": "Produit"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Chef de projet"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Chef de projet)",
+              "nativeQueryRef": "Chef de projet",
+              "displayName": "Chef de projet"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Ressources"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Ressources)",
+              "nativeQueryRef": "Ressources",
+              "displayName": "Ressources"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Début planifié"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Début planifié)",
+              "nativeQueryRef": "Début planifié",
+              "displayName": "Début planifié"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Date de besoin"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Date de besoin)",
+              "nativeQueryRef": "Date de besoin",
+              "displayName": "Date de besoin"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Heures toutes lignes (h)"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Heures toutes lignes (h))",
+              "nativeQueryRef": "Heures toutes lignes (h)",
+              "displayName": "Heures toutes lignes (h)"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Réalisé toutes lignes (h)"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Réalisé toutes lignes (h))",
+              "nativeQueryRef": "Réalisé toutes lignes (h)",
+              "displayName": "Réalisé toutes lignes (h)"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Lignes de l'affaire"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Lignes de l'affaire)",
+              "nativeQueryRef": "Lignes de l'affaire",
+              "displayName": "Lignes dans le périmètre"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Personnes internes"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Personnes internes)",
+              "nativeQueryRef": "Personnes internes",
+              "displayName": "Personnes internes"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Affaires"
+                        }
+                      },
+                      "Property": "Personnes externes"
+                    }
+                  },
+                  "Function": 3
+                }
+              },
+              "queryRef": "Min(Affaires.Personnes externes)",
+              "nativeQueryRef": "Personnes externes",
+              "displayName": "Personnes externes"
+            }
+          ]
+        }
+      }
+    },
+    "objects": {
+      "subTotals": [
+        {
+          "properties": {
+            "rowSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "columnSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "values": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "9D"
+                }
+              }
+            },
+            "valuesOnRow": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#1F2937'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "columnHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "9D"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "rowHeaders": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "9D"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#6B7280'"
+                    }
+                  }
+                }
+              }
+            },
+            "backColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "general": [
+        {
+          "properties": {
+            "layout": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Compact'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "gridHorizontal": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "gridVertical": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "rowPadding": {
+              "expr": {
+                "Literal": {
+                  "Value": "2D"
+                }
+              }
+            },
+            "outlineWeight": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Carte d''identité'"
+                }
+              }
+            },
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "11D"
+                }
+              }
+            },
+            "bold": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "fontColor": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#1F2A44'"
+                    }
+                  }
+                }
+              }
+            },
+            "titleWrap": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": {
+                      "Value": "'#FFFFFF'"
+                    }
+                  }
+                }
+              }
+            },
+            "transparency": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "dropShadow": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

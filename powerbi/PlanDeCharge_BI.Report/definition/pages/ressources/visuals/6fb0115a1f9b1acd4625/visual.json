@@ -1,0 +1,162 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.1.0/schema.json",
+  "name": "6fb0115a1f9b1acd4625",
+  "position": {
+    "x": 16,
+    "y": 1878,
+    "z": 58000,
+    "height": 110,
+    "width": 1248,
+    "tabOrder": 58000
+  },
+  "visual": {
+    "visualType": "textbox",
+    "objects": {
+      "general": [
+        {
+          "properties": {
+            "paragraphs": [
+              {
+                "textRuns": [
+                  {
+                    "value": "NOTES DE LECTURE",
+                    "textStyle": {
+                      "fontSize": "8.5pt",
+                      "fontWeight": "bold",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Charge d'une ressource = charge fixe hors projet + heures des lignes de l'onglet Charge où elle figure (colonne K pour un dessinateur, L pour une ressource externe), réparties par mois comme sur le tableau de bord.",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Une ligne = une ressource : plusieurs personnes sur un même sous-projet = plusieurs lignes, chacune avec ses heures. Capacité et charge fixe : Data (F-G ou I-J), sinon valeurs par défaut du Dashboard Excel.",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              },
+              {
+                "textRuns": [
+                  {
+                    "value": "•  Toutes les ressources des listes Data sont affichées (l'Excel n'en montre que 16) ; une ressource saisie dans Charge mais absente de Data apparaît avec les réglages par défaut. Lignes avec dessinateur ET externe : seule la colonne K compte.",
+                    "textStyle": {
+                      "fontSize": "8pt",
+                      "fontStyle": "italic",
+                      "color": "#6B7280"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "dropShadow": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "padding": [
+        {
+          "properties": {
+            "top": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "right": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            },
+            "bottom": {
+              "expr": {
+                "Literal": {
+                  "Value": "0D"
+                }
+              }
+            },
+            "left": {
+              "expr": {
+                "Literal": {
+                  "Value": "4D"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}
