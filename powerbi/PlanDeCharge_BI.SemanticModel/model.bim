@@ -2705,7 +2705,7 @@
           },
           {
             "name": "Capacité projets par personne (h/mois)",
-            "expression": "MAX ( Réglages[Capacité projets par personne (Excel)] )",
+            "expression": "MAX ( 'Réglages'[Capacité projets par personne (Excel)] )",
             "lineageTag": "c07c4816-6e8c-5f5d-bb7d-9c03d4e78e44",
             "displayFolder": "Charge",
             "description": "Capacité par défaut - charge fixe par défaut (réglages du Dashboard Excel).",
@@ -3135,7 +3135,7 @@
           },
           {
             "name": "Capacité projets de l'équipe (h/mois)",
-            "expression": "MAX ( Réglages[Capacité projets de l'équipe (Excel)] )",
+            "expression": "MAX ( 'Réglages'[Capacité projets de l'équipe (Excel)] )",
             "lineageTag": "6788a21c-ad66-5053-827e-4ca4a8098399",
             "displayFolder": "Mois et capacité",
             "description": "Somme des (capacité - charge fixe) des ressources des listes Data : constante par mois (ligne pointillée).",
@@ -3797,7 +3797,7 @@
               "[Périmètre en vigueur] & \"  ·  \"",
               "    & IF ( [Répartition en vigueur] = \"Tout sur le mois de début\", \"tout sur le mois de début\",",
               "        \"lissage en jours ouvrés jusqu'au besoin\" )",
-              "    & \"  ·  \" & SELECTEDVALUE ( Réglages[Rappel capacité] )"
+              "    & \"  ·  \" & SELECTEDVALUE ( 'Réglages'[Rappel capacité] )"
             ],
             "lineageTag": "9e01faa3-3166-5dc1-a296-f8e7711e6353",
             "displayFolder": "Textes",
@@ -4200,7 +4200,7 @@
               "    CALCULATE (",
               "        SWITCH (",
               "            _code,",
-              "            \"autoStart\", MAX ( Réglages[1er mois automatique] ),",
+              "            \"autoStart\", MAX ( 'Réglages'[1er mois automatique] ),",
               "            \"start\", [Premier mois affiché],",
               "            \"picMois\", [Mois du pic],",
               "            \"finPeriode\", [Dernier mois affiché],",
@@ -4231,7 +4231,7 @@
               "        SWITCH (",
               "            _code,",
               "            \"periodeTxt\", [Période affichée],",
-              "            \"reglagesTxt\", SELECTEDVALUE ( Réglages[Rappel des réglages (Excel)] ),",
+              "            \"reglagesTxt\", SELECTEDVALUE ( 'Réglages'[Rappel des réglages (Excel)] ),",
               "            BLANK ()",
               "        ),",
               "        REMOVEFILTERS ( Lignes ),",

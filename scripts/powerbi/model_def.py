@@ -1030,7 +1030,7 @@ mesure("Réalisé (h)", D_CH, F_H, "Heures × avancement des lignes du périmèt
 mesure("Reste à faire (h)", D_CH, F_H, "Charge identifiée - réalisé.", "[Charge identifiée (h)] - [Réalisé (h)]")
 mesure("Capacité projets par personne (h/mois)", D_CH, F_H,
        "Capacité par défaut - charge fixe par défaut (réglages du Dashboard Excel).",
-       "MAX ( Réglages[Capacité projets par personne (Excel)] )")
+       "MAX ( 'Réglages'[Capacité projets par personne (Excel)] )")
 mesure("ETP-mois", D_CH, F_DEC, "Charge identifiée / (capacité - charge fixe) d'une personne (0 si diviseur <= 0).", """
 VAR _c = [Capacité projets par personne (h/mois)]
 RETURN
@@ -1126,7 +1126,7 @@ mesure("Charge hors période ou sans date de début (h)", D_MO, F_H, "Charge ide
        "sélectionnés (arrondie à 0,1 h).", """
 MAX ( 0, ROUND ( [Charge identifiée (h)] - [Charge répartie (h)], 1 ) )""")
 mesure("Capacité projets de l'équipe (h/mois)", D_MO, F_H, "Somme des (capacité - charge fixe) des ressources des "
-       "listes Data : constante par mois (ligne pointillée).", "MAX ( Réglages[Capacité projets de l'équipe (Excel)] )")
+       "listes Data : constante par mois (ligne pointillée).", "MAX ( 'Réglages'[Capacité projets de l'équipe (Excel)] )")
 mesure("Mois en surcharge", D_MO, F_INT, "Mois où la charge arrondie dépasse la capacité projets arrondie.", """
 VAR _cap = ROUND ( [Capacité projets de l'équipe (h/mois)], 0 )
 RETURN
@@ -1330,7 +1330,7 @@ mesure("Rappel des réglages", D_TX, None, "Réglages appliqués par les segment
 [Périmètre en vigueur] & "  ·  "
     & IF ( [Répartition en vigueur] = "Tout sur le mois de début", "tout sur le mois de début",
         "lissage en jours ouvrés jusqu'au besoin" )
-    & "  ·  " & SELECTEDVALUE ( Réglages[Rappel capacité] )""")
+    & "  ·  " & SELECTEDVALUE ( 'Réglages'[Rappel capacité] )""")
 mesure("Données lues le", D_TX, None, "Date et heure de l'actualisation (heure de Paris).",
        "SELECTEDVALUE ( Actualisation[Libellé] )")
 mesure("Titre du périmètre", D_TX, None, "PROJETS EN COURS ou TOUS LES PROJETS.", """
@@ -1493,10 +1493,10 @@ _CODES = {
     "picCap": "[Pic en % de la capacité]", "nbRetard": "[Affaires en retard]", "nbDepasse": "[Affaires hors délai]",
     "nbEcart": "[Affaires en écart]", "mois": "CALCULATE ( [Charge répartie (h)], Mois[Mois] = _mois )",
 }
-_CODES_MOIS = {"autoStart": "MAX ( Réglages[1er mois automatique] )", "start": "[Premier mois affiché]",
+_CODES_MOIS = {"autoStart": "MAX ( 'Réglages'[1er mois automatique] )", "start": "[Premier mois affiché]",
                "picMois": "[Mois du pic]", "finPeriode": "[Dernier mois affiché]",
                "premSurcharge": "[Premier mois en surcharge]"}
-_CODES_TEXTE = {"periodeTxt": "[Période affichée]", "reglagesTxt": "SELECTEDVALUE ( Réglages[Rappel des réglages (Excel)] )"}
+_CODES_TEXTE = {"periodeTxt": "[Période affichée]", "reglagesTxt": "SELECTEDVALUE ( 'Réglages'[Rappel des réglages (Excel)] )"}
 _CTX_EXCEL = """
         REMOVEFILTERS ( Lignes ),
         REMOVEFILTERS ( Affaires ),

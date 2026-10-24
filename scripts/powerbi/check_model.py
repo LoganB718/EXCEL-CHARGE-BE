@@ -249,6 +249,13 @@ def sans_textes_ni_commentaires(code):
 nb_refs = 0
 fonctions_vues = set()
 for nom, code in mesures.items():
+    # Power BI refuse un nom de table non entouré d'apostrophes s'il contient autre chose que [A-Za-z0-9_]
+    # (« jeton non valide » sur Réglages[…]) ; pbi_parsers l'accepte, d'où ce contrôle lexical
+    nu = re.sub(r"'(?:[^']|'')*'|\[[^\]]*\]", " ", sans_textes_ni_commentaires(code))
+    hors_ascii = sorted({ch for ch in nu if ord(ch) > 127})
+    if hors_ascii:
+        erreur(f"DAX [{nom}] : caractère(s) {''.join(hors_ascii)} hors apostrophes et crochets "
+               f"(nom de table à écrire 'Table'[Colonne])")
     try:
         ast = analyse_dax(code)
     except Exception as ex:  # noqa: BLE001
