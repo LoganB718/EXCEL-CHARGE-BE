@@ -4,10 +4,10 @@
   "position": {
     "x": 16,
     "y": 614,
-    "z": 36000,
+    "z": 61000,
     "height": 140,
-    "width": 408.0,
-    "tabOrder": 36000
+    "width": 618.0,
+    "tabOrder": 62000
   },
   "visual": {
     "visualType": "tableEx",
@@ -73,7 +73,7 @@
             "value": {
               "expr": {
                 "Literal": {
-                  "Value": "298D"
+                  "Value": "508D"
                 }
               }
             }
@@ -310,5 +310,59 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "types_affaire_choisie",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Mesures"
+              }
+            },
+            "Property": "Affaire choisie"
+          }
+        },
+        "type": "Advanced",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "m",
+              "Entity": "Mesures",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "Comparison": {
+                  "ComparisonKind": 0,
+                  "Left": {
+                    "Measure": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Source": "m"
+                        }
+                      },
+                      "Property": "Affaire choisie"
+                    }
+                  },
+                  "Right": {
+                    "Literal": {
+                      "Value": "1D"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "User",
+        "isHiddenInViewMode": true
+      }
+    ]
   }
 }

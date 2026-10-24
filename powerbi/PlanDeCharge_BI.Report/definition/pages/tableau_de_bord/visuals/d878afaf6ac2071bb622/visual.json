@@ -4,10 +4,10 @@
   "position": {
     "x": 760,
     "y": 816,
-    "z": 83000,
+    "z": 98000,
     "height": 296,
     "width": 220,
-    "tabOrder": 80000
+    "tabOrder": 95000
   },
   "visual": {
     "visualType": "donutChart",
@@ -476,6 +476,13 @@
               "expr": {
                 "Literal": {
                   "Value": "1D"
+                }
+              }
+            },
+            "percentageLabelPrecision": {
+              "expr": {
+                "Literal": {
+                  "Value": "0L"
                 }
               }
             }

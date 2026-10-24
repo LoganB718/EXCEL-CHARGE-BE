@@ -899,6 +899,11 @@ def _t(v):
 
 
 # ---- Charge
+# ALLSELECTED () : le contexte du miroir ne contient que les filtres extérieurs au visuel
+mesure("Affaire choisie")(lambda c: 1 if len({a["Affaire"] for a in c.affaires()}) == 1 else 0)
+mesure("Message fiche affaire")(lambda c: "" if c.mesure("Affaire choisie") == 1 else
+                                "Aucune affaire choisie : ouvrir cette fiche par clic droit sur une affaire > Extraire > "
+                                "Fiche affaire.")
 mesure("Charge identifiée (h)")(lambda c: _plus0(_sum(x["Heures (h)"] for x in c.lignes())))
 mesure("Réalisé (h)")(lambda c: _plus0(_sum(x["Réalisé de la ligne (h)"] for x in c.lignes())))
 mesure("Reste à faire (h)")(lambda c: c.mesure("Charge identifiée (h)") - c.mesure("Réalisé (h)"))

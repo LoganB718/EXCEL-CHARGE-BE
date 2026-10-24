@@ -2792,6 +2792,24 @@
             "formatString": "0"
           },
           {
+            "name": "Affaire choisie",
+            "expression": "IF ( CALCULATE ( DISTINCTCOUNT ( Affaires[Affaire] ), ALLSELECTED () ) = 1, 1, 0 )",
+            "lineageTag": "da6ef0d1-674b-5cfc-8d4a-740ffb5f6e17",
+            "displayFolder": "Affaires",
+            "description": "1 si les filtres extérieurs au visuel (extraction, segments) ne laissent qu'une affaire, sinon 0 : filtre des visuels de la fiche affaire ouverte sans extraction.",
+            "formatString": "0"
+          },
+          {
+            "name": "Message fiche affaire",
+            "expression": [
+              "IF ( [Affaire choisie] = 1, \"\",",
+              "    \"Aucune affaire choisie : ouvrir cette fiche par clic droit sur une affaire > Extraire > Fiche affaire.\" )"
+            ],
+            "lineageTag": "ab72ac3a-fc9a-58d9-86e6-382caaf6391a",
+            "displayFolder": "Affaires",
+            "description": "Consigne affichée quand la fiche affaire est ouverte sans extraction."
+          },
+          {
             "name": "Avancement moyen simple",
             "expression": [
               "VAR _p = SELECTEDVALUE ( 'Périmètre'[Périmètre], \"Comme dans Excel\" )",

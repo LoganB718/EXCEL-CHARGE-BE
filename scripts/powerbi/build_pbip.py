@@ -35,7 +35,7 @@ if ICI not in sys.path:
 
 from pbip_lib import (Rapport, Visuel, ColonneTableau, Couleur, Entier, theme_personnalise, col, mes, agr,
                       carte, segment, segment_dates, zone_texte, paragraphe, forme_rectangle, graphique_combo,
-                      graphique_barres, anneau, tableau, matrice, bouton, filtre_categoriel, couleur, literal,
+                      graphique_barres, anneau, tableau, matrice, bouton, filtre_categoriel, filtre_avance, filtre_comparaison, couleur, literal,
                       lit_texte, lit_valeur, hex_couleur, sel_metadata, sel_par_point, objet, ecrire_projet,
                       _habiller)
 from model_def import build_model
@@ -307,6 +307,9 @@ def tableau_projets(x, y, w, h, cle, avec_part=True, titre=None):
                 page_infobulle=P_IB_PROJET)
     teinte = couleur_champ(col("Lignes", "Couleur projet"))
     couleur_colonne(v, rang, police=couleur("FFFFFF"), fond=teinte)
+    charge = m("Charge identifiée (h)")
+    v.filtres.append(filtre_avance(charge, filtre_comparaison(charge, ">", 0.0), nom=cle + "_sans_zero",
+                                   masque=True))
     return v
 
 
@@ -358,6 +361,7 @@ def page_tableau_de_bord(r):
                                w - 8, H - 108, couleur_barres=BARRE_LISTE, fond=False, cle="c1_barres",
                                infobulles=[m("Nombre d'affaires"), m("Reste à faire (h)")],
                                texte_alt="Charge identifiée par chef de projet, par charge décroissante"))
+    props_sans_selecteur(_par_cle(p, "c1_barres"), "categoryAxis", {"maxMarginFactor": Entier(45)})
     # carte 2 : programmes suivis
     x, w = cartes[1]
     p.ajouter(rectangle(x, y, w, H, "c2_fond"))
@@ -390,6 +394,7 @@ def page_tableau_de_bord(r):
                                H - 156, titre="Par type d'affaire (h)", style_titre={"fontSize": 9, "fontColor": GREY},
                                couleur_barres=BARRE_LISTE, fond=False, cle="c3_types",
                                infobulles=[m("Part de la charge (%)"), m("Nombre d'affaires")]))
+    props_sans_selecteur(_par_cle(p, "c3_types"), "categoryAxis", {"maxMarginFactor": Entier(45)})
     # carte 4 : plus gros reste à faire (mise en avant, fond bleu nuit)
     x, w = cartes[3]
     p.ajouter(rectangle(x, y, w, H, "c4_fond", remplissage=NAVY, contour=NAVY))
@@ -407,12 +412,11 @@ def page_tableau_de_bord(r):
                ("Début planifié", "Plus gros reste à faire – début planifié"),
                ("Date de besoin", "Plus gros reste à faire – date de besoin"),
                ("Avancement", "Plus gros reste à faire – avancement")]
-    v = fiche_valeurs([(lib, m(n)) for lib, n in details], x + 8, y + 92, w - 16, H - 96, "c4_details",
-                      fond_cellules=NAVY, texte_libelles="AEB9CC", texte_valeurs="FFFFFF")
-    av = m("Plus gros reste à faire – avancement")
-    couleur_colonne(v, av, police=regle((condition(m("Plus gros reste à faire – retard"), ">", 0.0), "F97066"),
-                                        (condition(m("Plus gros reste à faire – retard"), "<=", 0.0), "FFFFFF")))
-    p.ajouter(v)
+    retard = m("Plus gros reste à faire – retard")
+    p.ajouter(fiche_valeurs([(lib, m(n)) for lib, n in details], x + 10, y + 94, w - 20, H - 100, "c4_details",
+                            fond_cellules=NAVY, texte_libelles="AEB9CC", texte_valeurs="FFFFFF", taille=8.5,
+                            couleurs={len(details) - 1: regle((condition(retard, ">", 0.0), "F97066"),
+                                                              (condition(retard, "<=", 0.0), "FFFFFF"))}))
 
     # --- section 2 : indicateurs clés
     y += H + 16
@@ -468,6 +472,7 @@ def page_tableau_de_bord(r):
                      total=m("Charge identifiée (h)"), libelle_total="h au total", fond=False,
                      page_infobulle=P_IB_PROJET, cle="g2_anneau",
                      texte_alt="Part de chaque projet dans la charge identifiée ; total au centre"))
+    props_sans_selecteur(_par_cle(p, "g2_anneau"), "labels", {"percentageLabelPrecision": Entier(0)})
     p.ajouter(tableau_projets(xr + 228, y + 44, wr - 236, 292, "g2_legende"))
     p.ajouter(texte([paragraphe(dict(texte="Total au centre · une couleur par projet, commune aux deux graphiques "
                                      "(n° 1 à 9) · au-delà de 9 projets, « Autres projets » en gris.",
@@ -517,19 +522,28 @@ def notes_lecture(notes, x, y, w, h, cle):
 
 
 def fiche_valeurs(champs, x, y, w, h, cle, titre=None, fond_cellules="FFFFFF", texte_libelles=GREY,
-                  texte_valeurs=INK, taille=9):
-    """Liste « libellé : valeur » verticale : matrice de valeurs seules, valeurs en lignes."""
-    v = matrice([], [], [c for _lib, c in champs], x, y, w, h, titre=titre, cle=cle, taille_texte=taille,
-                entete_fond=fond_cellules, entete_texte=fond_cellules, fond=fond_cellules if titre else False,
-                entete=False)
-    for (lib, c), proj in zip(champs, v.roles["Values"]):
-        proj["displayName"] = lib
-    props_sans_selecteur(v, "values", {"valuesOnRow": True, "fontColor": couleur(texte_valeurs),
-                                       "backColor": couleur(fond_cellules), "bold": True})
-    props_sans_selecteur(v, "rowHeaders", {"fontColor": couleur(texte_libelles), "backColor": couleur(fond_cellules)})
-    props_sans_selecteur(v, "grid", {"gridHorizontal": False, "gridVertical": False, "rowPadding": 2.0,
-                                     "outlineWeight": 0.0})
-    return v
+                  texte_valeurs=INK, taille=9, couleurs=None, part_libelles=0.45):
+    """Liste « libellé : valeur » verticale : une zone de texte par libellé et une carte à plusieurs lignes par
+    valeur (une matrice à valeurs en lignes s'affichait mal dans Desktop : fond et couleurs ignorés, défilement).
+    couleurs : {indice du champ: Couleur} pour colorer une valeur (règle ou mesure). Renvoie la liste des visuels."""
+    visuels = []
+    if titre:
+        visuels.append(rectangle(x, y, w, h, cle + "_fond", remplissage=fond_cellules))
+        visuels.append(ligne_texte(titre, x + 6, y + 6, w - 12, 24, cle + "_titre", taille=11, couleur_txt=NAVY,
+                                   gras=True))
+        y, h = y + 34, h - 38
+    pas = h / max(1, len(champs))
+    wl = (w - 12) * part_libelles
+    for k, (lib, champ) in enumerate(champs):
+        yk = y + k * pas
+        visuels.append(ligne_texte(lib, x + 6, yk, wl, pas, "%s_lib%d" % (cle, k), taille=taille,
+                                   couleur_txt=texte_libelles))
+        v = texte_mesure(champ, x + 6 + wl, yk + 2, w - 12 - wl, pas - 2, "%s_val%d" % (cle, k), taille=taille,
+                         couleur_txt=texte_valeurs, gras=True, nom_affiche=lib)
+        if couleurs and k in couleurs:
+            v.objets["dataLabels"][0]["properties"]["color"] = couleurs[k].pbir()
+        visuels.append(v)
+    return visuels
 
 
 def tableau_affaires(x, y, w, h):
@@ -619,17 +633,19 @@ def page_ressources(r):
                                 filtres=[filtre_categoriel(col("Ressources", "Type de ressource"),
                                                            ["Interne", "Externe", "Hors liste"], masque=True,
                                                            nom="filtre_seg_ressource")]))
-    info = Visuel("multiRowCard", M + 300 + G, y, UTILE - 300 - G, 56)
-    for lib, n in (("Origine", "Origine de la ressource"), ("Capacité (h/mois)", "Capacité de la ressource (h/mois)"),
-                   ("Charge fixe hors projet (h/mois)", "Charge fixe de la ressource (h/mois)"),
-                   ("Disponible pour les projets (h/mois)", "Capacité projets de la ressource (h/mois)")):
-        info.ajouter_role("Values", m(n), nom_affiche=lib)
-    info.objet("dataLabels", {"fontSize": 12.0, "color": couleur(NAVY), "bold": True})
-    info.objet("categoryLabels", {"show": True, "fontSize": 8.5, "color": couleur(GREY)})
-    info.objet("card", {"barShow": True, "barColor": couleur(ACCENT), "outlineStyle": 0.0})
-    info.cle = "info_ressource"
-    _habiller(info, fond="FFFFFF", entete=False)
-    p.ajouter(info)
+    xi, wi = M + 300 + G, UTILE - 300 - G
+    p.ajouter(rectangle(xi, y, wi, 56, "info_fond"))
+    p.ajouter(rectangle(xi, y, 4, 56, "info_accent", remplissage=ACCENT, contour=None))
+    infos = (("Origine", "Origine de la ressource", 2.2), ("Capacité (h/mois)", "Capacité de la ressource (h/mois)", 1),
+             ("Charge fixe hors projet (h/mois)", "Charge fixe de la ressource (h/mois)", 1),
+             ("Disponible pour les projets (h/mois)", "Capacité projets de la ressource (h/mois)", 1))
+    total = sum(k for _l, _n, k in infos)
+    xk = xi + 12
+    for i_info, (lib, n, k) in enumerate(infos):
+        wk = (wi - 20) * k / total
+        p.ajouter(valeur(m(n), xk, y + 4, wk - 8, 48, "info_ressource%d" % i_info, taille=11, couleur_txt=NAVY,
+                         gras=True, etiquette=lib))
+        xk += wk
     y += 56 + 12
     tuiles = grille(5)
     TH = 120
@@ -806,8 +822,7 @@ def page_fiche(r):
              ("Lignes dans le périmètre", agr(A, "Lignes de l'affaire", "min")),
              ("Personnes internes", agr(A, "Personnes internes", "min")),
              ("Personnes externes", agr(A, "Personnes externes", "min"))]
-    v = fiche_valeurs(ident, M, y, 400, 300, "identite", titre="Carte d'identité", texte_valeurs=INK)
-    p.ajouter(v)
+    p.ajouter(fiche_valeurs(ident, M, y, 400, 300, "identite", titre="Carte d'identité", texte_valeurs=INK))
     rep = graphique_barres(col("Mois", "Libellé mois"), [m("Charge répartie sans les mois vides (h)")], M + 400 + G, y,
                            UTILE - 400 - G,
                            300, type_visuel="columnChart", serie=col(L, "Ressource de la ligne"),
@@ -819,21 +834,11 @@ def page_fiche(r):
     sous_titre(rep, "Répartition choisie dans le segment ; tous les mois où l'affaire a des heures")
     p.ajouter(rep)
     y += 300 + 12
-    w3 = (UTILE - 2 * G) / 3
-    p.ajouter(tableau([ColonneTableau(col(L, "Type"), w3 - 110, "Type d'affaire"),
+    w2 = (UTILE - G) / 2
+    p.ajouter(tableau([ColonneTableau(col(L, "Type"), w2 - 110, "Type d'affaire"),
                        ColonneTableau(m("Charge identifiée (h)"), 80, "Heures")],
-                      M, y, w3, 140, titre="Type(s) d'affaire des lignes", tri=[(m("Charge identifiée (h)"), "Descending")],
+                      M, y, w2, 140, titre="Type(s) d'affaire des lignes", tri=[(m("Charge identifiée (h)"), "Descending")],
                       cle="types"))
-    bar = graphique_barres(col(A, "Affaire"), [agr(A, "Avancement", "min"), agr(A, "Avancement attendu", "min")],
-                           M + w3 + G, y, w3, 140, titre="Avancement réel et attendu", legende="Top", cle="avancement",
-                           tri=False, decimales=None)
-    del bar.roles["Category"]   # deux barres seules : réel et attendu
-    bar.roles["Y"][0]["displayName"] = "Avancement réel"
-    bar.roles["Y"][1]["displayName"] = "Avancement attendu"
-    bar.objet("dataPoint", {"fill": couleur("7FD1AE")}, sel_metadata(agr(A, "Avancement", "min")))
-    bar.objet("dataPoint", {"fill": couleur(FIX_C)}, sel_metadata(agr(A, "Avancement attendu", "min")))
-    props_sans_selecteur(bar, "categoryAxis", {"show": False})
-    p.ajouter(bar)
     p.ajouter(texte([
         paragraphe(dict(texte="Lecture", gras=True, taille=9, couleur=NAVY)),
         paragraphe(dict(texte="Avancement attendu = jours ouvrés écoulés depuis le début planifié ÷ jours ouvrés "
@@ -842,7 +847,7 @@ def page_fiche(r):
                         taille=8.5, couleur=GREY)),
         paragraphe(dict(texte="Les lignes terminées comptent dans l'avancement de l'affaire mais n'apparaissent "
                               "ci-dessous qu'avec le périmètre « Tous les projets ».", taille=8.5, couleur=GREY)),
-    ], M + 2 * (w3 + G), y, w3, 140, "lecture", fond="FFFFFF"))
+    ], M + w2 + G, y, w2, 140, "lecture", fond="FFFFFF"))
     y += 140 + 16
     y = section(p, "LIGNES DE L'AFFAIRE (onglet Charge)", y, "s1")
     cols = [
@@ -871,6 +876,15 @@ def page_fiche(r):
     p.ajouter(ligne_texte("Description, contraintes et autres informations : colonnes G, H et I de l'onglet Charge. "
                           "« À corriger » = ligne avec un dessinateur (K) ET une ressource externe (L) : seule K compte.",
                           M, y, UTILE, 28, "note", taille=8.5, italique=True))
+    # ouverte sans extraction (onglet visible dans Desktop), la fiche mélangerait toutes les affaires : consigne et
+    # visuels vides tant qu'une seule affaire n'est pas choisie
+    choisie = m("Affaire choisie")
+    for v in p.visuels:
+        if v.type not in ("shape", "textbox", "actionButton", "slicer") and v.cle != "bandeau_lecture":
+            v.filtres.append(filtre_avance(choisie, filtre_comparaison(choisie, "=", 1.0),
+                                           nom="%s_affaire_choisie" % v.cle, masque=True))
+    p.ajouter(texte_mesure(m("Message fiche affaire"), M, 34, 820, 28, "message", taille=12, couleur_txt="F97066",
+                           gras=True))
     return p
 
 
@@ -979,15 +993,13 @@ def page_infobulle_occupation(r):
     p.ajouter(texte_mesure(col("Ressources", "Ressource"), 8, 6, 304, 24, "ressource", taille=11, couleur_txt=NAVY,
                            gras=True))
     occ = m("Occupation (%)")
-    v = fiche_valeurs([("Charge fixe hors projet (h)", m("Charge fixe (h)")),
+    p.ajouter(fiche_valeurs([("Charge fixe hors projet (h)", m("Charge fixe (h)")),
                        ("Charge projets (h)", m("Charge répartie (h)")),
                        ("Charge totale (h)", m("Charge totale de la ressource (h)")),
                        ("Capacité (h/mois)", m("Capacité de la ressource (h/mois)")),
                        ("Marge (h)", m("Marge de la ressource (h)")),
-                       ("Occupation", occ)], 8, 34, 304, 178, "detail")
-    couleur_colonne(v, occ, police=couleur_champ(m("Couleur du texte (occupation)")),
-                    fond=couleur_champ(m("Couleur de fond (occupation)")))
-    p.ajouter(v)
+                       ("Occupation", occ)], 8, 34, 304, 178, "detail",
+                      couleurs={5: couleur_champ(m("Couleur du texte (occupation)"))}))
     return p
 
 

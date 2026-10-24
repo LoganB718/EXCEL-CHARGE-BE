@@ -102,6 +102,8 @@ OneDrive synchronisé.
   Les numéros 1 à 9 des couleurs renvoient au tableau des projets ; survoler une colonne affiche le projet.
 - **Fiche affaire** : clic droit sur une affaire (tableau des affaires ou lignes d'une ressource) >
   **Extraire** > **Fiche affaire**, ou sélectionner la ligne puis le bouton « Ouvrir la fiche de l'affaire ».
+  Dans Power BI Desktop, l'onglet « Fiche affaire » reste visible en bas : ouverte par cet onglet, sans
+  extraction, la fiche n'affiche qu'une consigne (aucune affaire choisie).
   Bouton **‹ Retour** pour revenir.
 - **Boutons** (« Ressources › », « Contrôle › », « Ouvrir la fiche de l'affaire », « ‹ Retour ») : dans
   **Power BI Desktop**, maintenir **Ctrl** en cliquant (un clic simple ne fait que sélectionner le bouton) ; dans

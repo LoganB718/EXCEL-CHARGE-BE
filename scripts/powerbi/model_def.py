@@ -1048,6 +1048,12 @@ DIVIDE ( [Charge identifiée (h)], CALCULATE ( [Charge identifiée (h)], ALLSELE
 D_AF = "Affaires"
 mesure("Nombre d'affaires", D_AF, F_INT, "Affaires (sous-projets regroupés) ayant au moins une ligne dans le "
        "périmètre.", fp("COUNTROWS ( Affaires )"))
+mesure("Affaire choisie", D_AF, F_INT, "1 si les filtres extérieurs au visuel (extraction, segments) ne laissent "
+       "qu'une affaire, sinon 0 : filtre des visuels de la fiche affaire ouverte sans extraction.", """
+IF ( CALCULATE ( DISTINCTCOUNT ( Affaires[Affaire] ), ALLSELECTED () ) = 1, 1, 0 )""")
+mesure("Message fiche affaire", D_AF, None, "Consigne affichée quand la fiche affaire est ouverte sans extraction.", """
+IF ( [Affaire choisie] = 1, "",
+    "Aucune affaire choisie : ouvrir cette fiche par clic droit sur une affaire > Extraire > Fiche affaire." )""")
 mesure("Avancement moyen simple", D_AF, F_PCT, "Moyenne simple des avancements des affaires.", f"""
 {_P}
 RETURN
